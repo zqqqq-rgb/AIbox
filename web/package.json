@@ -1,0 +1,13 @@
+{
+  "name": "aibox-web",
+  "private": true,
+  "type": "module",
+  "description": "AIBox 前端（零构建链静态 SPA）；package.json 仅用于 dev 测试（Vitest），不参与产物",
+  "scripts": {
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "vitest": "^2.1.9"
+  }
+}

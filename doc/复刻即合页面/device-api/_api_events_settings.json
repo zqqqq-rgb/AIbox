@@ -1,0 +1,1 @@
+{"code":0,"message":"ok","data":{"snapshot_retention_days":30,"event_retention_days":180,"auto_cleanup_enabled":true,"cleanup_start_percent":80,"cleanup_target_percent":70,"snapshot_stop_percent":90,"protect_unhandled":true,"protect_important":true,"default_trigger_interval_sec":30,"updated_by":"","updated_at_ms":1785315078942}}

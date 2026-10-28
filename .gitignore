@@ -1,0 +1,25 @@
+# 构建产物
+build/
+build-*/
+*.o
+*.a
+*.so
+*.exe
+
+# IDE / 工具
+.vscode/
+.idea/
+.cache/
+compile_commands.json
+
+# 板端运行时产物
+*.log
+/run/
+
+# 模型/大文件二进制（算法包经 AIBOX_PACKAGES 目录分发，不入库）
+*.rknn
+*.onnx
+
+# Python 缓存（tools/ 测试脚本）
+__pycache__/
+*.pyc

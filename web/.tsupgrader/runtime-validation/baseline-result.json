@@ -1,0 +1,60 @@
+{
+  "planHash": "0cab0d4f0a944d8df4eee99dcd04f29636fd6526c67a0b4669b814556cb91684",
+  "phase": "baseline",
+  "recordedAtUtc": "2026-10-27T03:42:35.3865950Z",
+  "retryCount": 0,
+  "resetBaseline": false,
+  "complete": true,
+  "result": {
+    "setupSucceeded": true,
+    "setupDurationMs": 2289,
+    "setupFailureOutput": null,
+    "assertions": [
+      {
+        "name": "tests-pass",
+        "kind": "process",
+        "verificationMethod": "test-results",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "\r\n\u003E test\r\n\u003E vitest run\r\n\r\n\r\n\u001B[1m\u001B[7m\u001B[36m RUN \u001B[39m\u001B[27m\u001B[22m \u001B[36mv2.1.9 \u001B[39m\u001B[90mE:/aibox/aibox-main/web\u001B[39m\r\n\r\n \u001B[32m\u2713\u001B[39m tests/overlay_core.test.js \u001B[2m(\u001B[22m\u001B[2m21 tests\u001B[22m\u001B[2m)\u001B[22m\u001B[90m 6\u001B[2mms\u001B[22m\u001B[39m\r\n \u001B[32m\u2713\u001B[39m tests/modules.test.js \u001B[2m(\u001B[22m\u001B[2m2 tests\u001B[22m\u001B[2m)\u001B[22m\u001B[90m 128\u001B[2mms\u001B[22m\u001B[39m\r\n\r\n\u001B[2m Test Files \u001B[22m \u001B[1m\u001B[32m2 passed\u001B[39m\u001B[22m\u001B[90m (2)\u001B[39m\r\n\u001B[2m      Tests \u001B[22m \u001B[1m\u001B[32m23 passed\u001B[39m\u001B[22m\u001B[90m (23)\u001B[39m\r\n\u001B[2m   Start at \u001B[22m 11:42:34\r\n\u001B[2m   Duration \u001B[22m 564ms\u001B[2m (transform 80ms, setup 0ms, collect 94ms, tests 134ms, environment 0ms, prepare 286ms)\u001B[22m\r\n\r\n",
+        "durationMs": 1447,
+        "testResults": {
+          "testFramework": "vitest",
+          "runnerDetectedFrom": "package_json",
+          "testsTotal": 23,
+          "testsPassed": 23,
+          "testsFailed": 0,
+          "testsSkipped": 0,
+          "parseFailed": false
+        }
+      }
+    ],
+    "executions": [
+      {
+        "source": "setup[0]",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "ci"
+        ],
+        "cwd": "E:\\aibox\\aibox-main\\web",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "tests-pass",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "test"
+        ],
+        "cwd": "E:\\aibox\\aibox-main\\web",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      }
+    ]
+  }
+}

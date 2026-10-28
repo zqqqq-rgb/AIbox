@@ -1,0 +1,1 @@
+{"code":0,"message":"ok","data":{"total_count":4,"today_count":4,"yesterday_count":0,"last_24h_count":4,"by_event_type":{"AREA_INTRUSION_RULE_MATCH":3,"POSE_RULE_MATCH":1},"by_class_name":{"person":3,"sitting":1},"by_process_status":{"unhandled":4}}}

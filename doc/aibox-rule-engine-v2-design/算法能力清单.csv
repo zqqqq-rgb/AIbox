@@ -1,0 +1,104 @@
+序号	分类	能力ID	名称	检测/触发说明	底层算法包ID	当前组件	当前版本	数据来源
+1	人员身份	face-detection	人脸检测	检测画面中的人脸位置与五点关键特征。	retinaface_mobile_rk3576	人脸检测	0.2.0-runtime-2.3.2	设备 /api/algorithms (2026-10-20)
+2	人员身份	face-recognition	人脸识别	识别人脸并与人员底库进行身份比对。	retinaface_mobile_rk3576	人脸检测	0.2.0-runtime-2.3.2	设备 /api/algorithms (2026-10-20)
+3	人员身份	face-feature	人脸特征提取	将对齐后的人脸转换为身份特征，用于底库比对。	sface_2021dec_rk3576	sface_2021dec_rk3576	sface-2021dec-rk3576-fp16-v1	设备 /api/algorithms (2026-10-20)
+4	人员身份	unknown-person	陌生人员识别	发现未录入人员底库的陌生人员。	retinaface_mobile_rk3576	人脸检测	0.2.0-runtime-2.3.2	设备 /api/algorithms (2026-10-20)
+5	人员身份	person-list-match	黑白名单人员识别	按人员名单识别重点关注或授权人员。	retinaface_mobile_rk3576	人脸检测	0.2.0-runtime-2.3.2	设备 /api/algorithms (2026-10-20)
+6	人员身份	person-reid	跨镜人员识别	在多个摄像头之间关联同一人员的出现记录。	—	待接入	待云端发布	未安装算法包
+7	行为姿态	crowd	人员聚集检测	发现指定区域内人员数量超过设定范围。	person_detector_rk3576	人员检测	1.0.0-ppyoloe-s-int8	设备 /api/algorithms (2026-10-20)
+8	行为姿态	loitering	人员徘徊检测	发现人员在指定区域内持续活动并达到设定轨迹距离。	person_detector_rk3576	人员检测	1.0.0-ppyoloe-s-int8	设备 /api/algorithms (2026-10-20)
+9	行为姿态	staying	人员滞留检测	发现同一人员在指定区域停留超过设定时长。	person_detector_rk3576	人员检测	1.0.0-ppyoloe-s-int8	设备 /api/algorithms (2026-10-20)
+10	行为姿态	off-duty	离岗检测	发现值守岗位在规定时段内无人。	person_detector_rk3576	人员检测	1.0.0-ppyoloe-s-int8	设备 /api/algorithms (2026-10-20)
+11	行为姿态	sleeping-duty	睡岗检测	发现值守人员趴卧、闭眼或持续静止等睡岗状态。	—	待接入	待云端发布	未安装算法包
+12	行为姿态	pose-analysis	人体姿态识别	识别站立、坐姿、蹲姿、弯腰、举手和躺卧等人体姿态。	pose_yolov8s_rk3576	姿态检测	0.1.2-contract4	设备 /api/algorithms (2026-10-20)
+13	行为姿态	fall	跌倒／倒地检测	发现人员跌倒或持续倒地状态。	fall_yolov8_rk3576	摔倒检测	0.1.3-contract4	设备 /api/algorithms (2026-10-20)
+14	行为姿态	fight	打架检测	发现人员之间疑似打斗或暴力冲突行为。	—	待接入	待云端发布	未安装算法包
+15	行为姿态	smoking	抽烟检测	发现人员手持香烟或正在抽烟的行为。	smoking_yolov8_rk3576	抽烟检测	0.1.6-temporal-confirmation	设备 /api/algorithms (2026-10-20)
+16	行为姿态	phone-use	使用手机／打电话检测	发现人员持续看手机或手持电话通话。	—	待接入	待云端发布	未安装算法包
+17	行为姿态	climbing	攀爬检测	发现人员攀爬设备、墙体或其他高处设施。	—	待接入	待云端发布	未安装算法包
+18	行为姿态	fence-crossing	翻越围栏检测	发现人员翻越指定围栏或隔离设施。	—	待接入	待云端发布	未安装算法包
+19	行为姿态	line-crossing-body	跨越或钻越输送线	发现人员跨越或钻越生产输送线。	—	待接入	待云端发布	未安装算法包
+20	行为姿态	conveyor-crossing	跨越或钻越传送带	发现人员跨越或钻越运行中的传送带。	—	待接入	待云端发布	未安装算法包
+21	生产安全	no-helmet	未戴安全帽检测	发现作业人员未正确佩戴安全帽。	ppe_yolov8_rk3576	安全装备检测	0.1.1-contract3	设备 /api/algorithms (2026-10-20)
+22	生产安全	no-vest	未穿反光衣检测	发现作业人员未穿反光背心或安全背心。	ppe_yolov8_rk3576	安全装备检测	0.1.1-contract3	设备 /api/algorithms (2026-10-20)
+23	生产安全	no-workwear	未穿工服检测	发现人员未按要求穿着指定工服。	—	待接入	待云端发布	未安装算法包
+24	生产安全	no-gloves	未戴手套检测	发现作业人员未佩戴防护手套。	—	待接入	待云端发布	未安装算法包
+25	生产安全	no-goggles	未戴护目镜检测	发现作业人员未佩戴护目镜。	—	待接入	待云端发布	未安装算法包
+26	生产安全	no-safety-shoes	未穿防护鞋检测	发现作业人员未穿安全鞋或防护鞋。	—	待接入	待云端发布	未安装算法包
+27	生产安全	no-mask	未戴口罩检测	发现作业人员未正确佩戴口罩。	ppe_yolov8_rk3576	安全装备检测	0.1.1-contract3	设备 /api/algorithms (2026-10-20)
+28	生产安全	person-vehicle-near	人车靠近预警	发现人员与车辆距离过近并持续后预警。	person_detector_rk3576	人员检测	1.0.0-ppyoloe-s-int8	设备 /api/algorithms (2026-10-20)
+29	生产安全	forklift-blind-zone	叉车盲区人员闯入	发现人员进入叉车驾驶员视野盲区。	—	待接入	待云端发布	未安装算法包
+30	生产安全	forklift-reversing-person	叉车倒车后方有人	叉车倒车时发现后方存在人员。	—	待接入	待云端发布	未安装算法包
+31	生产安全	dock-edge-person	装卸月台边缘人员靠近	发现人员过度靠近装卸月台边缘。	person_detector_rk3576	人员检测	1.0.0-ppyoloe-s-int8	设备 /api/algorithms (2026-10-20)
+32	生产安全	automation-danger-zone	自动化设备危险区人员闯入	发现人员进入自动化设备危险运行区域。	—	待接入	待云端发布	未安装算法包
+33	生产安全	warehouse-aisle-blocked	仓储作业通道堆货	发现货物占用仓储作业通道。	—	待接入	待云端发布	未安装算法包
+34	生产安全	cargo-stack-high	货物堆放超高	发现货物堆放高度超过安全限制。	—	待接入	待云端发布	未安装算法包
+35	生产安全	cargo-stack-tilt	货物堆放倾斜预警	发现堆放货物明显倾斜并存在倒塌风险。	—	待接入	待云端发布	未安装算法包
+36	生产安全	pallet-misaligned	托盘放置不到位	发现托盘未放置在规定位置或明显偏移。	—	待接入	待云端发布	未安装算法包
+37	生产安全	rack-cargo-protrusion	货架货物探出	发现货物超出货架安全边界。	—	待接入	待云端发布	未安装算法包
+38	生产安全	rack-deformation	货架横梁或立柱变形	发现货架横梁或立柱存在明显变形。	—	待接入	待云端发布	未安装算法包
+39	生产安全	rack-guard-missing	货架防撞护栏缺失	发现货架防撞护栏缺失或未在位。	—	待接入	待云端发布	未安装算法包
+40	生产安全	dock-mixed-traffic	装卸区人车混行	发现装卸区域人员与车辆混行风险。	—	待接入	待云端发布	未安装算法包
+41	生产安全	vehicle-dock-blind-zone	人员进入车辆与月台盲区	发现人员进入车辆与月台之间的盲区。	—	待接入	待云端发布	未安装算法包
+42	生产安全	cargo-drop	装卸货物掉落检测	发现装卸过程中货物跌落。	—	待接入	待云端发布	未安装算法包
+43	生产安全	sorting-pinch-hand	分拣线夹点手部靠近	发现手部靠近分拣线夹点危险区域。	—	待接入	待云端发布	未安装算法包
+44	生产安全	equipment-danger-zone	设备运行危险区人员闯入	设备运行时发现人员进入危险区域。	—	待接入	待云端发布	未安装算法包
+45	生产安全	safety-door-open-running	安全门开启状态运行	发现安全门开启时设备仍处于运行状态。	—	待接入	待云端发布	未安装算法包
+46	生产安全	machine-guard-open	机械防护罩缺失或开启	发现机械防护罩缺失或未关闭。	—	待接入	待云端发布	未安装算法包
+47	生产安全	limb-in-danger-zone	人员肢体伸入设备危险区	发现人员肢体伸入设备危险区域。	—	待接入	待云端发布	未安装算法包
+48	生产安全	robot-work-zone	工业机器人工作区人员闯入	发现人员进入工业机器人运行区域。	—	待接入	待云端发布	未安装算法包
+49	生产安全	confined-space-no-guardian	有限空间作业无监护人	发现有限空间作业现场缺少监护人员。	—	待接入	待云端发布	未安装算法包
+50	生产安全	maintenance-no-lockout	检维修未挂牌上锁	发现检维修作业未执行挂牌上锁。	—	待接入	待云端发布	未安装算法包
+51	生产安全	confined-space-not-isolated	有限空间入口未隔离	发现有限空间入口未设置有效隔离。	—	待接入	待云端发布	未安装算法包
+52	生产安全	conveyor-pinch-hand	传送带夹点手部靠近	发现手部靠近传送带夹点危险区域。	—	待接入	待云端发布	未安装算法包
+53	生产安全	person-under-hoist	行车吊物下方有人	发现吊装物下方存在人员。	—	待接入	待云端发布	未安装算法包
+54	生产安全	crane-operating-zone	行车运行区人员闯入	发现人员进入行车运行区域。	—	待接入	待云端发布	未安装算法包
+55	生产安全	cabinet-door-open-long	配电柜门长时间开启	发现配电柜门开启超过设定时长。	—	待接入	待云端发布	未安装算法包
+56	生产安全	cabinet-front-blocked	配电柜前方堆物	发现配电柜前方安全区域被物品占用。	—	待接入	待云端发布	未安装算法包
+57	生产安全	height-no-harness	高处作业未佩戴安全带	发现高处作业人员未佩戴安全带。	—	待接入	待云端发布	未安装算法包
+58	生产安全	harness-not-anchored	安全带未正确系挂	发现安全带未正确连接可靠锚点。	—	待接入	待云端发布	未安装算法包
+59	生产安全	edge-proximity	临边危险靠近预警	发现人员靠近临边危险区域。	person_detector_rk3576	人员检测	1.0.0-ppyoloe-s-int8	设备 /api/algorithms (2026-10-20)
+60	生产安全	opening-proximity	洞口危险靠近预警	发现人员靠近未防护洞口。	person_detector_rk3576	人员检测	1.0.0-ppyoloe-s-int8	设备 /api/algorithms (2026-10-20)
+61	生产安全	lift-door-open	施工升降机楼层防护门未关闭	发现施工升降机楼层防护门未关闭。	—	待接入	待云端发布	未安装算法包
+62	生产安全	lift-overcrowding	施工升降机人员超限	发现施工升降机内人员数量超过限制。	—	待接入	待云端发布	未安装算法包
+63	生产安全	material-hoist-person	物料提升机违规载人	发现物料提升机违规搭载人员。	—	待接入	待云端发布	未安装算法包
+64	生产安全	foundation-pit-person	基坑边缘人员靠近	发现人员过度靠近基坑边缘。	person_detector_rk3576	人员检测	1.0.0-ppyoloe-s-int8	设备 /api/algorithms (2026-10-20)
+65	生产安全	foundation-pit-vehicle	基坑／临边车辆靠近	发现车辆过度靠近所画危险边缘。	person_detector_rk3576	人员检测	1.0.0-ppyoloe-s-int8	设备 /api/algorithms (2026-10-20)
+66	生产安全	foundation-pit-stacking	基坑边缘违规堆载	发现基坑边缘违规堆放重物。	—	待接入	待云端发布	未安装算法包
+67	生产安全	lifting-no-commander	起重吊装无指挥人员	发现起重吊装作业现场缺少指挥人员。	—	待接入	待云端发布	未安装算法包
+68	生产安全	distribution-box-open	配电箱门未关闭	发现配电箱门未关闭。	—	待接入	待云端发布	未安装算法包
+69	生产安全	temporary-cable-obstruction	临时电缆拖地或横穿通道	发现临时电缆拖地或横穿人员通道。	—	待接入	待云端发布	未安装算法包
+70	烟火险情	smoke	烟雾检测	发现可见烟雾并触发险情预警。	—	待接入	待云端发布	未安装算法包
+71	烟火险情	flame	明火／火焰检测	发现可见明火或火焰。	—	待接入	待云端发布	未安装算法包
+72	烟火险情	fire-passage-blocked	消防通道占用检测	发现消防通道被已支持的车辆或物体持续占用。	person_detector_rk3576	人员检测	1.0.0-ppyoloe-s-int8	设备 /api/algorithms (2026-10-20)
+73	烟火险情	extinguisher-missing	灭火器离位检测	发现灭火器未放置在规定位置。	—	待接入	待云端发布	未安装算法包
+74	烟火险情	dangerous-goods-mixed	危险品与普通货物混放	发现危险品与普通货物违规混放。	—	待接入	待云端发布	未安装算法包
+75	烟火险情	hydrant-cabinet-blocked	消火栓或配电箱前堆物	发现消火栓或配电箱前方被物品遮挡。	—	待接入	待云端发布	未安装算法包
+76	烟火险情	cargo-near-sprinkler	货物距离喷淋头过近	发现货物与消防喷淋头安全距离不足。	—	待接入	待云端发布	未安装算法包
+77	烟火险情	fire-shutter-blocked	消防卷帘门下方堆物	发现消防卷帘门下方存在影响关闭的物品。	—	待接入	待云端发布	未安装算法包
+78	烟火险情	warehouse-charging	仓库内违规充电	发现仓库内电动车或电池违规充电。	—	待接入	待云端发布	未安装算法包
+79	烟火险情	combustibles-in-charging-area	充电区域堆放可燃物	发现充电区域周边堆放可燃物。	—	待接入	待云端发布	未安装算法包
+80	烟火险情	hot-work-no-extinguisher	动火作业未配置灭火器	发现动火作业现场未配置灭火器。	—	待接入	待云端发布	未安装算法包
+81	烟火险情	hot-work-no-guardian	动火作业无监护人	发现动火作业现场缺少监护人员。	—	待接入	待云端发布	未安装算法包
+82	烟火险情	gas-cylinder-unsecured	气瓶倒放或未固定	发现气瓶倒放或未采取可靠固定措施。	—	待接入	待云端发布	未安装算法包
+83	烟火险情	oxygen-acetylene-mixed	氧气瓶与乙炔瓶混放	发现氧气瓶与乙炔瓶违规混放。	—	待接入	待云端发布	未安装算法包
+84	烟火险情	oxygen-acetylene-distance	氧气瓶与乙炔瓶距离异常	发现氧气瓶与乙炔瓶安全距离不足。	—	待接入	待云端发布	未安装算法包
+85	车辆车牌	illegal-parking	车辆违停检测	发现车辆在禁停区域停留超过设定时长。	person_detector_rk3576	人员检测	1.0.0-ppyoloe-s-int8	设备 /api/algorithms (2026-10-20)
+86	车辆车牌	vehicle-area-intrusion	车辆区域入侵	发现车辆进入指定警戒区域。	person_detector_rk3576	人员检测	1.0.0-ppyoloe-s-int8	设备 /api/algorithms (2026-10-20)
+87	车辆车牌	vehicle-line-crossing	车辆越线检测	发现车辆穿越指定边界并区分到场、离场。	person_detector_rk3576	人员检测	1.0.0-ppyoloe-s-int8	设备 /api/algorithms (2026-10-20)
+88	车辆车牌	vehicle-counting	车辆计数	统计画面或指定区域内的车辆数量。	person_detector_rk3576	人员检测	1.0.0-ppyoloe-s-int8	设备 /api/algorithms (2026-10-20)
+89	车辆车牌	parking-occupancy	车位占用与到离场	识别车位持续占用和持续空置状态。	person_detector_rk3576	人员检测	1.0.0-ppyoloe-s-int8	设备 /api/algorithms (2026-10-20)
+90	车辆车牌	plate-recognition	车牌识别	检测车辆号牌并识别车牌号码。	hyperlpr3_plate_detector_rk3576	通用车牌检测	1.0.0-hyperlpr3-fp16	设备 /api/algorithms (2026-10-20)
+91	车辆车牌	plate-detection	车牌检测	检测画面中的车牌位置、四角点和单双层类型。	hyperlpr3_plate_detector_rk3576	通用车牌检测	1.0.0-hyperlpr3-fp16	设备 /api/algorithms (2026-10-20)
+92	车辆车牌	e-bike-elevator	电瓶车进电梯检测	发现电瓶车进入电梯轿厢。	—	待接入	待云端发布	未安装算法包
+93	车辆车牌	forklift-speeding	叉车超速检测	发现叉车行驶速度超过设定限制。	—	待接入	待云端发布	未安装算法包
+94	车辆车牌	forklift-carrying-person	叉车违规载人	发现叉车违规搭载人员。	—	待接入	待云端发布	未安装算法包
+95	车辆车牌	forklift-high-fork	叉车货叉高位行驶	发现叉车行驶时货叉未降至安全高度。	—	待接入	待云端发布	未安装算法包
+96	车辆车牌	dock-no-wheel-chock	车辆靠台未放置止轮器	发现车辆靠台后未放置止轮器。	—	待接入	待云端发布	未安装算法包
+97	车辆车牌	dock-door-no-vehicle	月台门开启但无车辆	发现月台门开启但对应泊位没有车辆。	—	待接入	待云端发布	未安装算法包
+98	车辆车牌	parked-forklift-fork-up	叉车停放货叉未落地	发现叉车停放后货叉未落地。	—	待接入	待云端发布	未安装算法包
+99	车辆车牌	forklift-load-obstruction	叉车货物过高遮挡视线	发现叉车载货过高并遮挡驾驶视线。	—	待接入	待云端发布	未安装算法包
+100	车辆车牌	forklift-load-unstable	叉车载货倾斜不稳	发现叉车货物明显倾斜或装载不稳。	—	待接入	待云端发布	未安装算法包
+101	通用视觉	area-intrusion	区域入侵检测	发现人员或目标进入指定警戒区域。	person_detector_rk3576	人员检测	1.0.0-ppyoloe-s-int8	设备 /api/algorithms (2026-10-20)
+102	通用视觉	line-crossing	越线检测	发现人员脚点进入或离开指定警戒区域。	person_detector_rk3576	人员检测	1.0.0-ppyoloe-s-int8	设备 /api/algorithms (2026-10-20)
+103	通用视觉	people-counting	人员计数	统计画面或指定区域内的人员数量。	person_detector_rk3576	人员检测	1.0.0-ppyoloe-s-int8	设备 /api/algorithms (2026-10-20)

@@ -1,0 +1,2 @@
+# 产物纪律：web/ 交付物 = *.js + index.html + vendor/（零构建链，无 node_modules）
+node_modules/

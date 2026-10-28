@@ -1,0 +1,9 @@
+﻿算法包ID,组件名,版本,绑定能力数,支撑已接入能力数,生产可用,备注
+person_detector_rk3576,人员检测,1.0.0-ppyoloe-s-int8,19,19,true,
+retinaface_mobile_rk3576,人脸检测,0.2.0-runtime-2.3.2,4,3,true,
+hyperlpr3_plate_detector_rk3576,通用车牌检测,1.0.0-hyperlpr3-fp16,2,2,true,
+pose_yolov8s_rk3576,姿态检测,0.1.2-contract4,1,1,true,
+fall_yolov8_rk3576,摔倒检测,0.1.3-contract4,1,1,true,
+smoking_yolov8_rk3576,抽烟检测,0.1.6-temporal-confirmation,1,1,true,
+ppe_yolov8_rk3576,安全装备检测,0.1.1-contract3,3,3,true,
+sface_2021dec_rk3576,sface-2021dec-rk3576-fp16-v1,1,1,true,人脸特征提取组件，来自 /api/face-recognition/status

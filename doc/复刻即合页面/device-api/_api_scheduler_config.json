@@ -1,0 +1,1 @@
+{"code":0,"message":"ok","data":{"enabled":true,"strategy":"production_fair_queue","global_npu_tokens":1,"per_camera_target_fps":2.000,"per_camera_max_fps":2.000,"source":"system_kv","updated_at_ms":1785315078942}}

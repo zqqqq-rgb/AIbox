@@ -1,0 +1,13 @@
+{
+  "algo_id": "person-det",
+  "version": "1.0.0-fake",
+  "platform": "rk3588",
+  "model_file": "yolov8n.rknn",
+  "input_w": 640,
+  "input_h": 640,
+  "num_cls": 80,
+  "default_threshold": 0.45,
+  "core": "steady",
+  "classes": [0],
+  "class_names": {"0": "person"}
+}
