@@ -48,8 +48,8 @@ if(TARGET cpp_httplib::httplib)
 else()
   find_package(PkgConfig QUIET)
   if(PkgConfig_FOUND)
-    pkg_check_modules(CPP_HTTPLIB QUIET cpp-httplib)
-    if(DEFINED CPP_HTTPLIB_LIBRARIES)
+    pkg_check_modules(CPP_HTTPLIB QUIET IMPORTED_TARGET cpp-httplib)
+    if(TARGET PkgConfig::CPP_HTTPLIB)
       set(HAVE_HTTPLIB_PC TRUE)
       set(HTTPLIB_INC_DIRS ${CPP_HTTPLIB_INCLUDE_DIRS})
       set(HTTPLIB_LIBS ${CPP_HTTPLIB_LIBRARIES})
@@ -72,7 +72,13 @@ endif()
 # ---- aibox_business：业务进程逻辑（纯逻辑，x86 CI 可编译可测）----
 add_library(aibox_business STATIC
   db.cpp
+  db_tasks.cpp
+  task_service.cpp
+  task_compiler.cpp
   config_compiler.cpp
+  resource_budget.cpp
+  camera_service.cpp
+  reconciler.cpp
   uds_client.cpp
   zlm_client.cpp
   http_api.cpp
@@ -80,6 +86,7 @@ add_library(aibox_business STATIC
   hook_server.cpp
   janitor.cpp
   onvif_client.cpp
+  access_session.cpp
 )
 target_include_directories(aibox_business PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}
@@ -87,6 +94,10 @@ target_include_directories(aibox_business PUBLIC
 )
 if(HAVE_HTTPLIB_TARGET)
   target_link_libraries(aibox_business PUBLIC cpp_httplib::httplib)
+elseif(HAVE_HTTPLIB_PC)
+  # Shared distro builds require their feature macros in every consumer too.
+  # Discarding pkg-config CFLAGS changes httplib::Client's layout (heap/stack corruption).
+  target_link_libraries(aibox_business PUBLIC PkgConfig::CPP_HTTPLIB)
 elseif(HTTPLIB_LIBS)
   # PUBLIC：测试可执行文件（test_ws_hub/test_http_api 直用 httplib::Client）传递链接
   target_link_libraries(aibox_business PUBLIC ${HTTPLIB_LIBS})

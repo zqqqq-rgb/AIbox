@@ -352,6 +352,43 @@ void test_bad_persisted_config_is_degraded() {
     cli.stop();
 }
 
+void test_sync_error_classification() {
+    for (const std::string command : {"add_cam", "set_algos"}) {
+        for (int code : {1002, 1003}) {
+            Db db(":memory:"); REQUIRE(db.migrate() == Db::kSchemaLatest);
+            CameraRow target;
+            target.name = "sync error"; target.rtsp_main = "rtsp://main"; target.rtsp_sub = "rtsp://sub";
+            REQUIRE(db.insert_camera(target) == 1);
+            FakeEngine engine;
+            engine.respond_once(command, code);
+            const auto path = make_sock_path(); REQUIRE(engine.start(path));
+            UdsClient client(path, db, {}, {10, 200, 0, 10000, 3});
+            client.start(); REQUIRE(wait_for([&] { return client.online(); }, 3000));
+            const auto stats = client.sync_stats();
+            const bool rebuilt = command == "add_cam" && code == 1003;
+            CHECK(stats.degraded_cams == (rebuilt ? 0 : 1));
+            if (rebuilt) CHECK(engine.remove_cam == 1 && engine.add_cam == 2 && engine.set_algos == 1);
+            else CHECK(db.pending_config_operations() == 1);
+            CameraConfigState state; REQUIRE(db.get_camera_config_state(1, state));
+            CHECK(state.apply_status == (rebuilt ? "succeeded" : "pending"));
+            client.stop();
+        }
+    }
+    // SYNCING may stop an absent channel (1002), but a busy remove (1003) stays unconfirmed.
+    for (int code : {1002, 1003}) {
+        Db db(":memory:"); REQUIRE(db.migrate() == Db::kSchemaLatest);
+        CameraRow stopped; stopped.name = "disabled"; stopped.enabled = false;
+        REQUIRE(db.insert_camera(stopped) == 1);
+        FakeEngine engine;
+        if (code == 1003) engine.respond_once("remove_cam", code);
+        const auto path = make_sock_path(); REQUIRE(engine.start(path));
+        UdsClient client(path, db, {}, {10, 200, 0, 10000, 3});
+        client.start(); REQUIRE(wait_for([&] { return client.online(); }, 3000));
+        CHECK(client.sync_stats().degraded_cams == (code == 1002 ? 0 : 1));
+        CHECK(db.pending_config_operations() == (code == 1002 ? 0 : 1));
+        client.stop();
+    }
+}
 void run() {
     // 构建标记：缺此行 = 板上跑的是陈旧二进制（勿信失败行号）
     fprintf(stderr, "[diag] test_uds_client v2 (fixture-guard + state-REQUIRE)\n");
@@ -362,6 +399,7 @@ void run() {
     test_ping_and_offline_cmds();
     test_business_restart_preserves_full_configuration();
     test_bad_persisted_config_is_degraded();
+    test_sync_error_classification();
 }
 
 }  // namespace

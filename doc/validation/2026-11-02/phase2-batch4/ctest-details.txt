@@ -1,0 +1,1377 @@
+Start testing: Nov 02 06:57 UTC
+----------------------------------------------------------
+1/34 Testing: fakes
+1/34 Test: fakes
+Command: "/workspace/build-dev/test_fakes"
+Directory: /workspace/build-dev/tests
+"fakes" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+test_fakes PASSED
+<end of output>
+Test time =   0.08 sec
+----------------------------------------------------------
+Test Passed.
+"fakes" end time: Nov 02 06:57 UTC
+"fakes" time elapsed: 00:00:00
+----------------------------------------------------------
+
+2/34 Testing: edge_meter
+2/34 Test: edge_meter
+Command: "/workspace/build-dev/test_edge_meter"
+Directory: /workspace/build-dev/tests
+"edge_meter" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+test_edge_meter PASSED
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Passed.
+"edge_meter" end time: Nov 02 06:57 UTC
+"edge_meter" time elapsed: 00:00:00
+----------------------------------------------------------
+
+3/34 Testing: bounded_queue
+3/34 Test: bounded_queue
+Command: "/workspace/build-dev/test_bounded_queue"
+Directory: /workspace/build-dev/tests
+"bounded_queue" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+test_bounded_queue PASSED
+<end of output>
+Test time =   0.12 sec
+----------------------------------------------------------
+Test Passed.
+"bounded_queue" end time: Nov 02 06:57 UTC
+"bounded_queue" time elapsed: 00:00:00
+----------------------------------------------------------
+
+4/34 Testing: frame_pool
+4/34 Test: frame_pool
+Command: "/workspace/build-dev/test_frame_pool"
+Directory: /workspace/build-dev/tests
+"frame_pool" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+test_frame_pool PASSED
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"frame_pool" end time: Nov 02 06:57 UTC
+"frame_pool" time elapsed: 00:00:00
+----------------------------------------------------------
+
+5/34 Testing: letterbox_math
+5/34 Test: letterbox_math
+Command: "/workspace/build-dev/test_letterbox_math"
+Directory: /workspace/build-dev/tests
+"letterbox_math" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+test_letterbox_math PASSED
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"letterbox_math" end time: Nov 02 06:57 UTC
+"letterbox_math" time elapsed: 00:00:00
+----------------------------------------------------------
+
+6/34 Testing: sampler
+6/34 Test: sampler
+Command: "/workspace/build-dev/test_sampler"
+Directory: /workspace/build-dev/tests
+"sampler" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+test_sampler PASSED
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"sampler" end time: Nov 02 06:57 UTC
+"sampler" time elapsed: 00:00:00
+----------------------------------------------------------
+
+7/34 Testing: uds_protocol
+7/34 Test: uds_protocol
+Command: "/workspace/build-dev/test_uds_protocol"
+Directory: /workspace/build-dev/tests
+"uds_protocol" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+test_uds_protocol PASSED
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"uds_protocol" end time: Nov 02 06:57 UTC
+"uds_protocol" time elapsed: 00:00:00
+----------------------------------------------------------
+
+8/34 Testing: npu_scheduler
+8/34 Test: npu_scheduler
+Command: "/workspace/build-dev/test_npu_scheduler"
+Directory: /workspace/build-dev/tests
+"npu_scheduler" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+[11-02 06:57:09.776][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:09.832][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:09.888][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:09.943][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:09.998][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:10.052][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:10.109][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:10.164][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:10.220][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:10.275][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:10.331][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:10.387][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:10.442][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:10.497][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:10.551][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:10.606][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:10.661][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:10.716][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:10.771][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:10.826][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:10.881][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:10.935][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:10.990][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:11.045][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:11.100][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:11.155][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:11.209][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:11.265][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:11.779][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:11.780][I][sched] probe cam=1 algo=yolo thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:11.785][I][sched] probe cam=1 algo=face thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:11.792][I][sched] probe cam=1 algo=face thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:11.799][I][sched] probe cam=1 algo=face thr=0.00 raw=0 max_conf=0.00
+[11-02 06:57:11.807][I][sched] probe cam=1 algo=face thr=0.00 raw=0 max_conf=0.00
+npu_scheduler PASSED
+<end of output>
+Test time =   2.04 sec
+----------------------------------------------------------
+Test Passed.
+"npu_scheduler" end time: Nov 02 06:57 UTC
+"npu_scheduler" time elapsed: 00:00:02
+----------------------------------------------------------
+
+9/34 Testing: npu_core_plan
+9/34 Test: npu_core_plan
+Command: "/workspace/build-dev/test_npu_core_plan"
+Directory: /workspace/build-dev/tests
+"npu_core_plan" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+npu_core_plan PASSED
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"npu_core_plan" end time: Nov 02 06:57 UTC
+"npu_core_plan" time elapsed: 00:00:00
+----------------------------------------------------------
+
+10/34 Testing: camera_channel
+10/34 Test: camera_channel
+Command: "/workspace/build-dev/test_camera_channel"
+Directory: /workspace/build-dev/tests
+"camera_channel" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+camera_channel PASSED
+<end of output>
+Test time =   2.53 sec
+----------------------------------------------------------
+Test Passed.
+"camera_channel" end time: Nov 02 06:57 UTC
+"camera_channel" time elapsed: 00:00:02
+----------------------------------------------------------
+
+11/34 Testing: rule_engine
+11/34 Test: rule_engine
+Command: "/workspace/build-dev/test_rule_engine"
+Directory: /workspace/build-dev/tests
+"rule_engine" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+[11-02 06:57:14.351][I][rules] probe cam=1 f=640x480 t[0] anchor=(0.516,0.625) in=1 stable=1 track=6 fresh=0 dwell_start=-1 armed=1 ts=3500 rules=2
+[11-02 06:57:14.351][I][rules] probe cam=1 f=640x480 t[0] anchor=(0.516,0.625) in=1 stable=1 track=6 fresh=0 dwell_start=-1 armed=1 ts=3500 rules=2
+[11-02 06:57:14.351][I][rules] probe cam=1 f=640x480 t[0] anchor=(0.516,0.625) in=1 stable=0 track=7 fresh=0 dwell_start=-1 armed=1 ts=3400 rules=1
+[11-02 06:57:14.351][I][rules] reappear cam=1 track=7 gap=6100ms → 重置 track 规则状态
+[11-02 06:57:14.351][I][rules] probe cam=1 f=640x480 t[0] anchor=(0.055,0.125) in=0 stable=0 track=7 fresh=0 dwell_start=-1 armed=1 ts=12000 rules=1
+[11-02 06:57:14.351][I][rules] reappear cam=1 track=7 gap=2500ms → 重置 track 规则状态
+[11-02 06:57:14.351][I][rules] probe cam=1 f=640x480 t[0] anchor=(0.508,0.729) in=1 stable=0 track=9 fresh=0 dwell_start=-1 armed=1 ts=3600 rules=1
+[11-02 06:57:14.351][I][rules] reappear cam=1 track=5 gap=2100ms → 重置 track 规则状态
+[11-02 06:57:14.351][I][rules] reappear cam=1 track=22 gap=7500ms → 重置 track 规则状态
+rule_engine PASSED
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"rule_engine" end time: Nov 02 06:57 UTC
+"rule_engine" time elapsed: 00:00:00
+----------------------------------------------------------
+
+12/34 Testing: rule_runtime
+12/34 Test: rule_runtime
+Command: "/workspace/build-dev/test_rule_runtime"
+Directory: /workspace/build-dev/tests
+"rule_runtime" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+[11-02 06:57:14.354][I][rules] probe cam=1 f=100x100 t[0] anchor=(0.300,0.400) in=1 stable=1 track=1 fresh=1 dwell_start=-1 armed=1 ts=900 rules=1
+[11-02 06:57:14.354][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:14.356][I][sched] probe cam=0 algo=model thr=0.00 raw=1 max_conf=0.20
+rule_runtime PASSED
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"rule_runtime" end time: Nov 02 06:57 UTC
+"rule_runtime" time elapsed: 00:00:00
+----------------------------------------------------------
+
+13/34 Testing: engine_v2
+13/34 Test: engine_v2
+Command: "/workspace/build-dev/test_engine_v2" "/workspace/build-dev/core-engine-fake" "/workspace/build-dev/businessd"
+Directory: /workspace/build-dev/tests
+"engine_v2" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+[11-02 06:57:14.360][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:14.362][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_v2_RyeXWs/old.sock)
+[11-02 06:57:14.362][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:14.362][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_v2_RyeXWs/old.sock)
+[11-02 06:57:14.372][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_v2_RyeXWs/old.sock)
+[11-02 06:57:14.481][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:14.520][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:14.521][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_v2_LnRy5x/engine.sock)
+[11-02 06:57:14.521][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:14.521][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_v2_LnRy5x/engine.sock)
+[11-02 06:57:14.721][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:14.722][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_v2_LnRy5x/engine.sock)
+[11-02 06:57:19.010][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+engine_v2 PASSED
+<end of output>
+Test time =   4.67 sec
+----------------------------------------------------------
+Test Passed.
+"engine_v2" end time: Nov 02 06:57 UTC
+"engine_v2" time elapsed: 00:00:04
+----------------------------------------------------------
+
+14/34 Testing: task_runtime
+14/34 Test: task_runtime
+Command: "/workspace/build-dev/test_task_runtime"
+Directory: /workspace/build-dev/tests
+"task_runtime" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+[11-02 06:57:19.030][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:19.032][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_task_runtime_10438_1.sock)
+[11-02 06:57:19.034][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:19.034][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:19.034][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:19.035][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:19.036][I][zlm] delStreamProxy __defaultVhost__/live/cam2_main
+[11-02 06:57:19.036][I][zlm] addStreamProxy cam2_main -> __defaultVhost__/live/cam2_main
+[11-02 06:57:19.036][I][zlm] delStreamProxy __defaultVhost__/live/cam2_sub
+[11-02 06:57:19.036][I][zlm] addStreamProxy cam2_sub -> __defaultVhost__/live/cam2_sub
+[11-02 06:57:19.037][I][uds-client] sync done: cams=2 add ok/fail=2/0 algos ok/fail=2/0 degraded=0
+[11-02 06:57:19.037][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_task_runtime_10438_1.sock)
+[11-02 06:57:19.064][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:19.064][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:19.070][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:19.071][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:19.071][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:19.071][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:19.089][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_task_runtime_10438_1.sock)
+[11-02 06:57:19.235][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:19.237][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_task_runtime_10438_2.sock)
+[11-02 06:57:19.237][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:19.237][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:19.238][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:19.238][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:19.238][I][zlm] delStreamProxy __defaultVhost__/live/cam2_main
+[11-02 06:57:19.239][I][zlm] addStreamProxy cam2_main -> __defaultVhost__/live/cam2_main
+[11-02 06:57:19.239][I][zlm] delStreamProxy __defaultVhost__/live/cam2_sub
+[11-02 06:57:19.239][I][zlm] addStreamProxy cam2_sub -> __defaultVhost__/live/cam2_sub
+[11-02 06:57:19.239][I][uds-client] sync done: cams=2 add ok/fail=2/0 algos ok/fail=2/0 degraded=0
+[11-02 06:57:19.239][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_task_runtime_10438_2.sock)
+[11-02 06:57:19.257][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_task_runtime_10438_2.sock)
+[11-02 06:57:19.404][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:19.406][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_task_runtime_10438_3.sock)
+[11-02 06:57:19.406][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:19.406][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:19.406][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:19.407][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:19.407][I][zlm] delStreamProxy __defaultVhost__/live/cam2_main
+[11-02 06:57:19.407][I][zlm] addStreamProxy cam2_main -> __defaultVhost__/live/cam2_main
+[11-02 06:57:19.407][I][zlm] delStreamProxy __defaultVhost__/live/cam2_sub
+[11-02 06:57:19.408][I][zlm] addStreamProxy cam2_sub -> __defaultVhost__/live/cam2_sub
+[11-02 06:57:19.408][I][uds-client] sync done: cams=2 add ok/fail=2/0 algos ok/fail=2/0 degraded=0
+[11-02 06:57:19.408][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_task_runtime_10438_3.sock)
+[11-02 06:57:19.517][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_task_runtime_10438_3.sock)
+[11-02 06:57:19.517][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_task_runtime_10438_3.sock)
+[11-02 06:57:19.518][I][uds-client] sync done: cams=2 add ok/fail=0/0 algos ok/fail=0/2 degraded=2
+[11-02 06:57:19.518][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_task_runtime_10438_3.sock)
+[11-02 06:57:19.522][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_task_runtime_10438_3.sock)
+[11-02 06:57:19.523][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_task_runtime_10438_3.sock)
+[11-02 06:57:19.525][I][uds-client] sync done: cams=2 add ok/fail=2/0 algos ok/fail=2/0 degraded=0
+[11-02 06:57:19.525][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_task_runtime_10438_3.sock)
+[11-02 06:57:19.576][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_task_runtime_10438_3.sock)
+[11-02 06:57:19.725][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:19.727][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_task_runtime_10438_4.sock)
+[11-02 06:57:19.728][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:19.728][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:19.728][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:19.729][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:19.729][I][zlm] delStreamProxy __defaultVhost__/live/cam2_main
+[11-02 06:57:19.730][I][zlm] addStreamProxy cam2_main -> __defaultVhost__/live/cam2_main
+[11-02 06:57:19.730][I][zlm] delStreamProxy __defaultVhost__/live/cam2_sub
+[11-02 06:57:19.730][I][zlm] addStreamProxy cam2_sub -> __defaultVhost__/live/cam2_sub
+[11-02 06:57:19.730][I][uds-client] sync done: cams=2 add ok/fail=2/0 algos ok/fail=2/0 degraded=0
+[11-02 06:57:19.730][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_task_runtime_10438_4.sock)
+[11-02 06:57:19.757][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:19.757][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:19.768][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_task_runtime_10438_4.sock)
+[11-02 06:57:19.914][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:19.916][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_task_runtime_10438_5.sock)
+[11-02 06:57:19.916][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:19.917][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:19.917][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:19.917][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:19.918][I][zlm] delStreamProxy __defaultVhost__/live/cam2_main
+[11-02 06:57:19.918][I][zlm] addStreamProxy cam2_main -> __defaultVhost__/live/cam2_main
+[11-02 06:57:19.918][I][zlm] delStreamProxy __defaultVhost__/live/cam2_sub
+[11-02 06:57:19.919][I][zlm] addStreamProxy cam2_sub -> __defaultVhost__/live/cam2_sub
+[11-02 06:57:19.919][I][uds-client] sync done: cams=2 add ok/fail=2/0 algos ok/fail=2/0 degraded=0
+[11-02 06:57:19.919][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_task_runtime_10438_5.sock)
+[11-02 06:57:19.992][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_task_runtime_10438_5.sock)
+[11-02 06:57:19.992][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_task_runtime_10438_5.sock)
+[11-02 06:57:19.996][I][uds-client] sync done: cams=2 add ok/fail=2/0 algos ok/fail=2/0 degraded=0
+[11-02 06:57:19.996][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_task_runtime_10438_5.sock)
+[11-02 06:57:20.004][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_task_runtime_10438_5.sock)
+[11-02 06:57:20.151][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:20.153][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_task_runtime_10438_6.sock)
+[11-02 06:57:20.153][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:20.153][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:20.153][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:20.154][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:20.154][I][zlm] delStreamProxy __defaultVhost__/live/cam2_main
+[11-02 06:57:20.154][I][zlm] addStreamProxy cam2_main -> __defaultVhost__/live/cam2_main
+[11-02 06:57:20.154][I][zlm] delStreamProxy __defaultVhost__/live/cam2_sub
+[11-02 06:57:20.155][I][zlm] addStreamProxy cam2_sub -> __defaultVhost__/live/cam2_sub
+[11-02 06:57:20.155][I][uds-client] sync done: cams=2 add ok/fail=2/0 algos ok/fail=2/0 degraded=0
+[11-02 06:57:20.155][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_task_runtime_10438_6.sock)
+[11-02 06:57:20.204][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_task_runtime_10438_6.sock)
+task_runtime PASSED
+<end of output>
+Test time =   1.32 sec
+----------------------------------------------------------
+Test Passed.
+"task_runtime" end time: Nov 02 06:57 UTC
+"task_runtime" time elapsed: 00:00:01
+----------------------------------------------------------
+
+15/34 Testing: degrade
+15/34 Test: degrade
+Command: "/workspace/build-dev/test_degrade"
+Directory: /workspace/build-dev/tests
+"degrade" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+degrade PASSED
+<end of output>
+Test time =   0.60 sec
+----------------------------------------------------------
+Test Passed.
+"degrade" end time: Nov 02 06:57 UTC
+"degrade" time elapsed: 00:00:00
+----------------------------------------------------------
+
+16/34 Testing: tracker
+16/34 Test: tracker
+Command: "/workspace/build-dev/test_tracker"
+Directory: /workspace/build-dev/tests
+"tracker" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+test_tracker PASSED
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"tracker" end time: Nov 02 06:57 UTC
+"tracker" time elapsed: 00:00:00
+----------------------------------------------------------
+
+17/34 Testing: uds_server
+17/34 Test: uds_server
+Command: "/workspace/build-dev/test_uds_server"
+Directory: /workspace/build-dev/tests
+"uds_server" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+test_uds_server PASSED
+<end of output>
+Test time =   6.13 sec
+----------------------------------------------------------
+Test Passed.
+"uds_server" end time: Nov 02 06:57 UTC
+"uds_server" time elapsed: 00:00:06
+----------------------------------------------------------
+
+18/34 Testing: yolov8_post
+18/34 Test: yolov8_post
+Command: "/workspace/build-dev/test_yolov8_post"
+Directory: /workspace/build-dev/tests
+"yolov8_post" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+[T1]
+[T2]
+[T3]
+[T4]
+[T4 ret=1]
+[T5]
+[T5 ret=1]
+[T6 pre]
+[11-02 06:57:27.088][W][yolov8] 输出数=1 != 9，post 闭包返回空（模型非 zoo 版）
+[T6 post]
+[T6 ret=0]
+[T7]
+[T8]
+yolov8_post PASSED
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"yolov8_post" end time: Nov 02 06:57 UTC
+"yolov8_post" time elapsed: 00:00:00
+----------------------------------------------------------
+
+19/34 Testing: algo_package
+19/34 Test: algo_package
+Command: "/workspace/build-dev/test_algo_package"
+Directory: /workspace/build-dev/tests
+"algo_package" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+algo_package PASSED
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"algo_package" end time: Nov 02 06:57 UTC
+"algo_package" time elapsed: 00:00:00
+----------------------------------------------------------
+
+20/34 Testing: model_registry
+20/34 Test: model_registry
+Command: "/workspace/build-dev/test_model_registry"
+Directory: /workspace/build-dev/tests
+"model_registry" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+[11-02 06:57:27.101][I][registry] [registry] good v1.0.0 loaded (/tmp/aibox_registry_test/good)
+[11-02 06:57:27.101][E][registry] [registry] broken DISABLED: platform 不匹配: no-such-plat != rk3588
+[11-02 06:57:27.102][E][registry] [registry] runfail DISABLED: selftest: infer.run fail
+[11-02 06:57:27.102][E][registry] reload good fail(模型文件缺失或为空: /tmp/aibox_registry_test/good/gone.rknn), rollback .bak
+[11-02 06:57:27.103][I][registry] rollback good OK
+[11-02 06:57:27.104][I][registry] [registry] doomed v1.0.0 loaded (/tmp/aibox_registry_test3/doomed)
+[11-02 06:57:27.104][E][registry] reload doomed fail(manifest.json 解析失败: * Line 1, Column 1
+  Syntax error: value, object or array expected.
+), rollback .bak
+model_registry PASSED
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"model_registry" end time: Nov 02 06:57 UTC
+"model_registry" time elapsed: 00:00:00
+----------------------------------------------------------
+
+21/34 Testing: db
+21/34 Test: db
+Command: "/workspace/build-dev/test_db"
+Directory: /workspace/build-dev/tests
+"db" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+[diag] test_db v3 (fk-probe + rowid-diag + REQUIRE guards)
+[11-02 06:57:27.107][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:27.108][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:27.110][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:27.112][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:27.114][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:27.116][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:27.117][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:27.119][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:27.171][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:27.173][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:27.185][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:27.199][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:27.199][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+db PASSED
+<end of output>
+Test time =   0.10 sec
+----------------------------------------------------------
+Test Passed.
+"db" end time: Nov 02 06:57 UTC
+"db" time elapsed: 00:00:00
+----------------------------------------------------------
+
+22/34 Testing: config_compiler
+22/34 Test: config_compiler
+Command: "/workspace/build-dev/test_config_compiler"
+Directory: /workspace/build-dev/tests
+"config_compiler" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+config_compiler PASSED
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"config_compiler" end time: Nov 02 06:57 UTC
+"config_compiler" time elapsed: 00:00:00
+----------------------------------------------------------
+
+23/34 Testing: tasks
+23/34 Test: tasks
+Command: "/workspace/build-dev/test_tasks"
+Directory: /workspace/build-dev/tests
+"tasks" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+[11-02 06:57:27.206][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:27.209][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:27.213][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:27.217][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:27.220][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:27.223][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:27.233][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:27.244][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:27.245][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+<end of output>
+Test time =   0.04 sec
+----------------------------------------------------------
+Test Passed.
+"tasks" end time: Nov 02 06:57 UTC
+"tasks" time elapsed: 00:00:00
+----------------------------------------------------------
+
+24/34 Testing: camera_service
+24/34 Test: camera_service
+Command: "/workspace/build-dev/test_camera_service"
+Directory: /workspace/build-dev/tests
+"camera_service" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+[11-02 06:57:27.249][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:27.251][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_1.sock)
+[11-02 06:57:27.251][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:27.251][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_1.sock)
+[11-02 06:57:27.254][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:27.255][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:27.255][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:27.255][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:27.284][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:27.285][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:27.291][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:27.291][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:27.291][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:27.291][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:27.296][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:27.296][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:27.301][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_1.sock)
+[11-02 06:57:27.404][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:27.410][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_2.sock)
+[11-02 06:57:27.410][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:27.410][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_2.sock)
+[11-02 06:57:27.414][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:27.414][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:27.414][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:27.415][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:27.415][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_2.sock)
+[11-02 06:57:27.574][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:27.577][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_3.sock)
+[11-02 06:57:27.577][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:27.578][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:27.578][I][uds-client] sync done: cams=1 add ok/fail=1/0 algos ok/fail=1/0 degraded=0
+[11-02 06:57:27.578][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_3.sock)
+[11-02 06:57:27.581][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_3.sock)
+[11-02 06:57:27.733][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:27.735][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_4.sock)
+[11-02 06:57:27.735][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:27.735][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_4.sock)
+[11-02 06:57:27.739][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:27.739][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:27.739][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:27.739][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:27.745][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_4.sock)
+[11-02 06:57:28.249][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_4.sock)
+[11-02 06:57:28.250][I][uds-client] sync done: cams=1 add ok/fail=1/0 algos ok/fail=1/0 degraded=0
+[11-02 06:57:28.250][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_4.sock)
+[11-02 06:57:28.251][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_4.sock)
+[11-02 06:57:28.400][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:28.403][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_5.sock)
+[11-02 06:57:28.404][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:28.404][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:28.404][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:28.405][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:28.405][I][uds-client] sync done: cams=1 add ok/fail=1/0 algos ok/fail=1/0 degraded=0
+[11-02 06:57:28.405][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_5.sock)
+[11-02 06:57:28.406][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_5.sock)
+[11-02 06:57:28.555][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:28.557][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_6.sock)
+[11-02 06:57:28.557][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:28.557][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_6.sock)
+[11-02 06:57:28.560][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:28.560][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:28.560][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:28.561][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:28.563][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:28.563][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:28.563][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:28.563][W][zlm] POST /index/api/addStreamProxy code=-1 msg=source rejected
+[11-02 06:57:28.563][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:28.564][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:28.564][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:28.564][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:29.064][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:29.065][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:29.065][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:29.065][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:29.066][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_6.sock)
+[11-02 06:57:29.215][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:29.217][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_7.sock)
+[11-02 06:57:29.217][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:29.217][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_7.sock)
+[11-02 06:57:29.220][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:29.221][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:29.221][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:29.221][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:29.223][I][zlm] delStreamProxy __defaultVhost__/live/cam2_main
+[11-02 06:57:29.223][I][zlm] addStreamProxy cam2_main -> __defaultVhost__/live/cam2_main
+[11-02 06:57:29.223][I][zlm] delStreamProxy __defaultVhost__/live/cam2_sub
+[11-02 06:57:29.223][I][zlm] addStreamProxy cam2_sub -> __defaultVhost__/live/cam2_sub
+[11-02 06:57:29.733][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_7.sock)
+[11-02 06:57:29.880][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:29.882][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_8.sock)
+[11-02 06:57:29.882][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:29.882][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_8.sock)
+[11-02 06:57:29.885][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:29.886][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:29.886][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:29.886][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:29.890][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_8.sock)
+[11-02 06:57:30.036][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:30.039][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_9.sock)
+[11-02 06:57:30.039][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:30.039][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_9.sock)
+[11-02 06:57:30.042][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:30.042][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:30.042][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:30.043][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:30.071][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:30.071][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:30.072][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_9.sock)
+[11-02 06:57:30.172][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:30.174][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_10.sock)
+[11-02 06:57:30.174][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:30.174][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_10.sock)
+[11-02 06:57:30.177][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:30.177][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:30.177][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:30.178][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:30.180][I][zlm] delStreamProxy __defaultVhost__/live/cam2_main
+[11-02 06:57:30.180][I][zlm] addStreamProxy cam2_main -> __defaultVhost__/live/cam2_main
+[11-02 06:57:30.180][I][zlm] delStreamProxy __defaultVhost__/live/cam2_sub
+[11-02 06:57:30.180][I][zlm] addStreamProxy cam2_sub -> __defaultVhost__/live/cam2_sub
+[11-02 06:57:30.184][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_10.sock)
+[11-02 06:57:30.331][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:30.333][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_11.sock)
+[11-02 06:57:30.333][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:30.333][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_11.sock)
+[11-02 06:57:30.336][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:30.336][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:30.336][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:30.336][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:30.338][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:30.339][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:30.339][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:30.339][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:30.341][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:30.341][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:30.341][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:30.342][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:30.343][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_11.sock)
+[11-02 06:57:30.492][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:30.494][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_12.sock)
+[11-02 06:57:30.494][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:30.494][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_12.sock)
+[11-02 06:57:30.497][W][zlm] delStreamProxy __defaultVhost__/live/cam1_main 失败（best-effort 继续）: zlm invalid response envelope
+[11-02 06:57:30.997][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:30.998][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:30.998][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:30.998][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:30.999][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_12.sock)
+[11-02 06:57:31.149][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:31.150][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_13.sock)
+[11-02 06:57:31.151][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:31.151][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_13.sock)
+[11-02 06:57:31.154][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:31.154][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:31.154][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:31.155][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:31.164][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_13.sock)
+[11-02 06:57:31.260][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_13.sock)
+[11-02 06:57:31.261][I][uds-client] sync done: cams=1 add ok/fail=0/0 algos ok/fail=0/0 degraded=1
+[11-02 06:57:31.261][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_13.sock)
+[11-02 06:57:31.263][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:31.263][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:31.264][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_13.sock)
+[11-02 06:57:31.414][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:31.416][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_14.sock)
+[11-02 06:57:31.416][W][zlm] delStreamProxy __defaultVhost__/live/cam1_main 失败（best-effort 继续）: zlm invalid response envelope
+[11-02 06:57:31.416][I][uds-client] sync done: cams=1 add ok/fail=0/0 algos ok/fail=0/0 degraded=1
+[11-02 06:57:31.416][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_14.sock)
+[11-02 06:57:31.419][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:31.419][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:31.419][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:31.419][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:31.420][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_14.sock)
+[11-02 06:57:31.570][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:31.572][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_15.sock)
+[11-02 06:57:31.572][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:31.572][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_15.sock)
+[11-02 06:57:31.575][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:31.575][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:31.576][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:31.576][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:31.576][E][reconciler] operation result persistence failed: cam 1
+[11-02 06:57:31.608][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_15.sock)
+[11-02 06:57:31.757][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:31.759][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_16.sock)
+[11-02 06:57:31.759][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:31.759][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_16.sock)
+[11-02 06:57:31.762][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:31.763][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:31.763][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:31.763][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:31.765][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:31.765][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:31.765][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:31.766][W][zlm] POST /index/api/addStreamProxy code=-1 msg=source rejected
+[11-02 06:57:31.766][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:31.766][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:31.766][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:31.766][W][zlm] POST /index/api/addStreamProxy code=-1 msg=source rejected
+[11-02 06:57:31.766][W][reconciler] cam 1 media compensation pending
+[11-02 06:57:32.767][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:32.767][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:32.768][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:32.768][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:32.769][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_16.sock)
+[11-02 06:57:32.919][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:32.920][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_17.sock)
+[11-02 06:57:32.920][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:32.920][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_17.sock)
+[11-02 06:57:32.923][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:32.924][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:32.924][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:32.924][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:32.924][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_17.sock)
+[11-02 06:57:32.929][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_17.sock)
+[11-02 06:57:33.130][I][uds-client] sync done: cams=1 add ok/fail=0/1 algos ok/fail=0/0 degraded=1
+[11-02 06:57:33.130][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_17.sock)
+[11-02 06:57:33.430][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_17.sock)
+[11-02 06:57:33.573][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:33.575][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_18.sock)
+[11-02 06:57:33.575][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:33.575][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_18.sock)
+[11-02 06:57:33.578][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:33.579][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:33.579][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:33.579][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:33.583][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_18.sock)
+[11-02 06:57:33.589][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_18.sock)
+[11-02 06:57:33.590][I][uds-client] sync done: cams=1 add ok/fail=1/0 algos ok/fail=1/0 degraded=0
+[11-02 06:57:33.590][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_18.sock)
+[11-02 06:57:33.592][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_18.sock)
+[11-02 06:57:33.740][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:33.741][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_19.sock)
+[11-02 06:57:33.742][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:33.742][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_19.sock)
+[11-02 06:57:33.745][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:33.745][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:33.745][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:33.745][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:33.749][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_19.sock)
+[11-02 06:57:33.896][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:33.898][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_20.sock)
+[11-02 06:57:33.898][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:33.898][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_20.sock)
+[11-02 06:57:33.901][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:33.901][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:33.902][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:33.902][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:33.906][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_20.sock)
+[11-02 06:57:34.053][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:34.054][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_21.sock)
+[11-02 06:57:34.054][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:34.054][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_21.sock)
+[11-02 06:57:34.057][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:34.058][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:34.058][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:34.058][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:34.068][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_21.sock)
+[11-02 06:57:34.214][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:34.215][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_22.sock)
+[11-02 06:57:34.216][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:34.216][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_22.sock)
+[11-02 06:57:34.219][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:34.219][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:34.219][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:34.219][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:35.221][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:35.221][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:35.223][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_22.sock)
+[11-02 06:57:35.322][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:35.324][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_23.sock)
+[11-02 06:57:35.324][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:35.324][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_23.sock)
+[11-02 06:57:35.327][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:35.327][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:35.327][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:35.327][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:36.334][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_23.sock)
+[11-02 06:57:36.482][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:36.484][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_24.sock)
+[11-02 06:57:36.484][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:36.484][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_24.sock)
+[11-02 06:57:36.487][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:36.488][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:36.488][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:36.488][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:36.493][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:36.493][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:36.498][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_24.sock)
+[11-02 06:57:36.594][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:36.596][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_25.sock)
+[11-02 06:57:36.596][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:36.596][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_25.sock)
+[11-02 06:57:36.600][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:36.600][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:36.600][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:36.600][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:38.607][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:38.607][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:38.607][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_25.sock)
+[11-02 06:57:38.707][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:38.709][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_service_10496_26.sock)
+[11-02 06:57:38.709][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:38.709][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_service_10496_26.sock)
+[11-02 06:57:38.712][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:38.713][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:38.713][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:38.713][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:38.725][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_service_10496_26.sock)
+camera_service PASSED
+<end of output>
+Test time =  11.62 sec
+----------------------------------------------------------
+Test Passed.
+"camera_service" end time: Nov 02 06:57 UTC
+"camera_service" time elapsed: 00:00:11
+----------------------------------------------------------
+
+25/34 Testing: business_startup
+25/34 Test: business_startup
+Command: "/workspace/build-dev/test_business_startup" "/workspace/build-dev/businessd"
+Directory: /workspace/build-dev/tests
+"business_startup" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+[11-02 06:57:39.708][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+<end of output>
+Test time =   6.00 sec
+----------------------------------------------------------
+Test Passed.
+"business_startup" end time: Nov 02 06:57 UTC
+"business_startup" time elapsed: 00:00:05
+----------------------------------------------------------
+
+26/34 Testing: business_recovery
+26/34 Test: business_recovery
+Command: "/workspace/build-dev/test_business_recovery" "/workspace/build-dev/businessd"
+Directory: /workspace/build-dev/tests
+"business_recovery" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+[recovery] disable step=0
+[11-02 06:57:44.900][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[recovery] disable step=1
+[11-02 06:57:45.294][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[recovery] disable step=2
+[11-02 06:57:45.701][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[recovery] disable step=3
+[11-02 06:57:46.101][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[recovery] disable step=4
+[11-02 06:57:46.500][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[recovery] delete step=0
+[11-02 06:57:46.906][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[recovery] delete step=1
+[11-02 06:57:47.306][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[recovery] delete step=2
+[11-02 06:57:47.705][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[recovery] delete step=3
+[11-02 06:57:48.103][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[recovery] delete step=4
+[11-02 06:57:48.498][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:48.915][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+<end of output>
+Test time =   4.43 sec
+----------------------------------------------------------
+Test Passed.
+"business_recovery" end time: Nov 02 06:57 UTC
+"business_recovery" time elapsed: 00:00:04
+----------------------------------------------------------
+
+27/34 Testing: task_recovery
+27/34 Test: task_recovery
+Command: "/workspace/build-dev/test_business_recovery" "/workspace/build-dev/businessd" "--tasks-only"
+Directory: /workspace/build-dev/tests
+"task_recovery" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+[task recovery] enable step=0
+[11-02 06:57:49.342][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[task recovery] enable step=1
+[11-02 06:57:49.763][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[task recovery] enable step=2
+[11-02 06:57:50.180][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[task recovery] enable step=3
+[11-02 06:57:50.597][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[task recovery] disable step=0
+[11-02 06:57:51.018][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[task recovery] disable step=1
+[11-02 06:57:51.444][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[task recovery] disable step=2
+[11-02 06:57:51.876][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[task recovery] disable step=3
+[11-02 06:57:52.314][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+<end of output>
+Test time =   3.41 sec
+----------------------------------------------------------
+Test Passed.
+"task_recovery" end time: Nov 02 06:57 UTC
+"task_recovery" time elapsed: 00:00:03
+----------------------------------------------------------
+
+28/34 Testing: uds_client
+28/34 Test: uds_client
+Command: "/workspace/build-dev/test_uds_client"
+Directory: /workspace/build-dev/tests
+"uds_client" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+[diag] test_uds_client v2 (fixture-guard + state-REQUIRE)
+[11-02 06:57:52.716][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:52.718][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_uds_client_12701_1.sock)
+[11-02 06:57:52.721][I][uds-client] sync done: cams=3 add ok/fail=3/0 algos ok/fail=3/0 degraded=0
+[11-02 06:57:52.721][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_uds_client_12701_1.sock)
+[11-02 06:57:52.723][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_uds_client_12701_1.sock)
+[11-02 06:57:52.821][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:52.823][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_uds_client_12701_2.sock)
+[11-02 06:57:52.825][I][uds-client] sync done: cams=3 add ok/fail=2/1 algos ok/fail=2/0 degraded=1
+[11-02 06:57:52.825][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_uds_client_12701_2.sock)
+[11-02 06:57:52.828][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_uds_client_12701_2.sock)
+[11-02 06:57:52.926][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:52.928][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_uds_client_12701_3.sock)
+[11-02 06:57:52.930][I][uds-client] sync done: cams=3 add ok/fail=3/0 algos ok/fail=3/0 degraded=0
+[11-02 06:57:52.930][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_uds_client_12701_3.sock)
+[11-02 06:57:52.933][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_uds_client_12701_3.sock)
+[11-02 06:57:53.035][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_uds_client_12701_3.sock)
+[11-02 06:57:53.037][I][uds-client] sync done: cams=3 add ok/fail=3/0 algos ok/fail=3/0 degraded=0
+[11-02 06:57:53.037][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_uds_client_12701_3.sock)
+[11-02 06:57:53.040][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_uds_client_12701_3.sock)
+[11-02 06:57:53.137][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:53.139][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_uds_client_12701_4.sock)
+[11-02 06:57:53.141][I][uds-client] sync done: cams=3 add ok/fail=3/0 algos ok/fail=3/0 degraded=0
+[11-02 06:57:53.141][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_uds_client_12701_4.sock)
+[11-02 06:57:53.150][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_uds_client_12701_4.sock)
+[11-02 06:57:53.251][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:53.253][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_uds_client_12701_5.sock)
+[11-02 06:57:53.255][I][uds-client] sync done: cams=3 add ok/fail=3/0 algos ok/fail=3/0 degraded=0
+[11-02 06:57:53.255][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_uds_client_12701_5.sock)
+[11-02 06:57:54.258][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_uds_client_12701_5.sock)
+[11-02 06:57:54.258][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:54.261][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_uds_client_12701_6.sock)
+[11-02 06:57:54.263][I][uds-client] sync done: cams=3 add ok/fail=3/0 algos ok/fail=3/0 degraded=0
+[11-02 06:57:54.263][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_uds_client_12701_6.sock)
+[11-02 06:57:54.266][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_uds_client_12701_6.sock)
+[11-02 06:57:54.363][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_uds_client_12701_6.sock)
+[11-02 06:57:54.365][I][uds-client] sync done: cams=3 add ok/fail=3/0 algos ok/fail=3/0 degraded=0
+[11-02 06:57:54.365][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_uds_client_12701_6.sock)
+[11-02 06:57:54.368][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_uds_client_12701_6.sock)
+[11-02 06:57:54.466][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:54.468][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_uds_client_12701_7.sock)
+[11-02 06:57:54.469][W][uds-client] cam 1 invalid configuration: person: ROI must contain at least three normalized points
+[11-02 06:57:54.470][I][uds-client] sync done: cams=3 add ok/fail=2/0 algos ok/fail=2/1 degraded=1
+[11-02 06:57:54.470][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_uds_client_12701_7.sock)
+[11-02 06:57:54.473][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_uds_client_12701_7.sock)
+[11-02 06:57:54.571][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:54.572][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_uds_client_12701_8.sock)
+[11-02 06:57:54.573][I][uds-client] sync done: cams=1 add ok/fail=0/1 algos ok/fail=0/0 degraded=1
+[11-02 06:57:54.573][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_uds_client_12701_8.sock)
+[11-02 06:57:54.578][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_uds_client_12701_8.sock)
+[11-02 06:57:54.674][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:54.675][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_uds_client_12701_9.sock)
+[11-02 06:57:54.676][I][uds-client] sync done: cams=1 add ok/fail=1/0 algos ok/fail=1/0 degraded=0
+[11-02 06:57:54.676][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_uds_client_12701_9.sock)
+[11-02 06:57:54.680][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_uds_client_12701_9.sock)
+[11-02 06:57:54.777][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:54.779][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_uds_client_12701_10.sock)
+[11-02 06:57:54.779][I][uds-client] sync done: cams=1 add ok/fail=1/0 algos ok/fail=0/1 degraded=1
+[11-02 06:57:54.779][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_uds_client_12701_10.sock)
+[11-02 06:57:54.784][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_uds_client_12701_10.sock)
+[11-02 06:57:54.880][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:54.881][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_uds_client_12701_11.sock)
+[11-02 06:57:54.882][I][uds-client] sync done: cams=1 add ok/fail=1/0 algos ok/fail=0/1 degraded=1
+[11-02 06:57:54.882][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_uds_client_12701_11.sock)
+[11-02 06:57:54.887][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_uds_client_12701_11.sock)
+[11-02 06:57:54.983][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:54.985][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_uds_client_12701_12.sock)
+[11-02 06:57:54.986][I][uds-client] sync done: cams=1 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:54.986][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_uds_client_12701_12.sock)
+[11-02 06:57:54.990][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_uds_client_12701_12.sock)
+[11-02 06:57:55.086][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:55.088][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_uds_client_12701_13.sock)
+[11-02 06:57:55.089][I][uds-client] sync done: cams=1 add ok/fail=0/0 algos ok/fail=0/0 degraded=1
+[11-02 06:57:55.089][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_uds_client_12701_13.sock)
+[11-02 06:57:55.093][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_uds_client_12701_13.sock)
+uds_client PASSED
+<end of output>
+Test time =   2.48 sec
+----------------------------------------------------------
+Test Passed.
+"uds_client" end time: Nov 02 06:57 UTC
+"uds_client" time elapsed: 00:00:02
+----------------------------------------------------------
+
+29/34 Testing: zlm_client
+29/34 Test: zlm_client
+Command: "/workspace/build-dev/test_zlm_client"
+Directory: /workspace/build-dev/tests
+"zlm_client" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+[11-02 06:57:55.192][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:55.192][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:55.192][I][zlm] cam1 代理编排完成: main=__defaultVhost__/live/cam1_main sub=__defaultVhost__/live/cam1_sub
+[11-02 06:57:55.243][I][zlm] addStreamProxy cam2_main -> __defaultVhost__/live/cam2_main
+[11-02 06:57:55.243][W][zlm] POST /index/api/addStreamProxy code=-1 msg=mock sub fail
+[11-02 06:57:55.243][E][zlm] cam2 add sub 失败（回滚 main 代理）: mock sub fail
+[11-02 06:57:55.243][I][zlm] delStreamProxy __defaultVhost__/live/cam2_main
+[11-02 06:57:55.294][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:55.294][I][zlm] cam1 代理编排完成: main=__defaultVhost__/live/cam1_main sub=__defaultVhost__/live/cam1_sub
+[11-02 06:57:55.345][I][zlm] addStreamProxy cam3_main -> __defaultVhost__/live/cam3_main
+[11-02 06:57:55.345][I][zlm] delStreamProxy __defaultVhost__/live/cam3_main
+[11-02 06:57:55.395][W][zlm] GET /index/api/getMediaList 传输失败
+[11-02 06:57:55.395][W][zlm] POST /index/api/addStreamProxy 传输失败
+[11-02 06:57:55.395][E][zlm] cam9 add main 失败: zlm http transport failed
+[11-02 06:57:55.395][W][zlm] GET /index/api/getMediaList 传输失败
+[11-02 06:57:55.396][W][zlm] POST /index/api/addStreamProxy code=-1 msg=mock sub fail
+[11-02 06:57:55.396][E][zlm] cam2 add sub 失败（回滚 main 代理）: mock sub fail
+[11-02 06:57:55.505][W][zlm] GET /index/api/getMediaList 传输失败
+zlm_client PASSED
+<end of output>
+Test time =   0.33 sec
+----------------------------------------------------------
+Test Passed.
+"zlm_client" end time: Nov 02 06:57 UTC
+"zlm_client" time elapsed: 00:00:00
+----------------------------------------------------------
+
+30/34 Testing: http_api
+30/34 Test: http_api
+Command: "/workspace/build-dev/test_http_api"
+Directory: /workspace/build-dev/tests
+"http_api" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+[diag] test_http_api v4 (body-dispatch + put-entry-log)
+[11-02 06:57:55.522][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:55.524][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:55.524][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:55.524][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:55.524][I][http-api] REST :54311 ready（static= recordings=）
+[11-02 06:57:55.527][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:55.674][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:55.676][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:55.676][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:55.676][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:55.676][I][http-api] REST :56471 ready（static= recordings=）
+[11-02 06:57:55.678][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:55.826][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:55.828][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:55.828][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:55.828][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:55.828][I][http-api] REST :51455 ready（static= recordings=）
+[11-02 06:57:55.830][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:55.830][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:55.830][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:55.830][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:55.835][W][http-api] code=1001 expected name/rtsp_main/rtsp_sub
+[11-02 06:57:55.842][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:55.843][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:55.848][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:55.848][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:55.854][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:55.949][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:55.951][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:55.951][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:55.951][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:55.951][I][http-api] REST :51631 ready（static= recordings=）
+[11-02 06:57:55.951][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:55.952][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:55.952][I][zlm] cam1 代理编排完成: main=__defaultVhost__/live/cam1_main sub=__defaultVhost__/live/cam1_sub
+[11-02 06:57:55.958][I][zlm] addStreamProxy cam2_main -> __defaultVhost__/live/cam2_main
+[11-02 06:57:55.958][I][zlm] addStreamProxy cam2_sub -> __defaultVhost__/live/cam2_sub
+[11-02 06:57:55.958][I][zlm] cam2 代理编排完成: main=__defaultVhost__/live/cam2_main sub=__defaultVhost__/live/cam2_sub
+[11-02 06:57:55.961][W][http-api] code=1001 fps 取值 1~25
+[11-02 06:57:55.961][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:56.109][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:56.111][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:56.111][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:56.111][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:56.111][I][http-api] REST :43011 ready（static= recordings=）
+[11-02 06:57:56.112][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:56.261][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:56.263][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:56.263][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:56.263][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:56.263][I][http-api] REST :58831 ready（static= recordings=）
+[11-02 06:57:56.265][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:56.413][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:56.415][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:56.415][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:56.415][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:56.415][I][http-api] REST :34685 ready（static= recordings=）
+[11-02 06:57:56.422][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:56.566][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:56.568][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:56.568][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:56.568][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:56.568][I][http-api] REST :38719 ready（static= recordings=）
+[11-02 06:57:56.570][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:56.718][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:56.720][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:56.720][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:56.720][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:56.720][I][http-api] REST :50729 ready（static= recordings=）
+[11-02 06:57:56.721][W][http-api] code=1001 quality 取值 sub|main
+[11-02 06:57:56.721][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:56.870][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:56.872][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:56.872][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:56.872][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:56.872][I][http-api] REST :47511 ready（static= recordings=）
+[11-02 06:57:56.873][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:56.873][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:56.873][I][zlm] cam1 代理编排完成: main=__defaultVhost__/live/cam1_main sub=__defaultVhost__/live/cam1_sub
+[11-02 06:57:56.880][W][http-api] code=1001 invalid algorithm fields
+[11-02 06:57:56.889][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:57.034][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:57.036][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:57.036][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:57.036][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:57.036][I][http-api] REST :59197 ready（static= recordings=）
+[11-02 06:57:57.037][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:57.037][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:57.037][I][zlm] cam1 代理编排完成: main=__defaultVhost__/live/cam1_main sub=__defaultVhost__/live/cam1_sub
+[11-02 06:57:57.045][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:57.045][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:57.056][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:57.196][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:57.198][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:57.198][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:57.198][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:57.198][I][http-api] REST :33453 ready（static= recordings=）
+[11-02 06:57:57.200][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:57.200][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:57.200][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:57.200][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:57.205][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:57.351][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:57.353][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:57.353][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:57.353][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:57.353][I][http-api] REST :33087 ready（static= recordings=）
+[11-02 06:57:57.354][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:57.354][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:57.354][I][zlm] cam1 代理编排完成: main=__defaultVhost__/live/cam1_main sub=__defaultVhost__/live/cam1_sub
+[11-02 06:57:57.354][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:57.454][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:57.455][I][uds-client] sync done: cams=1 add ok/fail=1/0 algos ok/fail=0/1 degraded=1
+[11-02 06:57:57.455][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:57.504][I][zlm] delStreamProxy __defaultVhost__/live/cam1_main
+[11-02 06:57:57.505][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:57.505][I][zlm] delStreamProxy __defaultVhost__/live/cam1_sub
+[11-02 06:57:57.505][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:57.507][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:57.655][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:57.657][I][uds-client] state DISCONNECTED -> SYNCING (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:57.657][I][uds-client] sync done: cams=0 add ok/fail=0/0 algos ok/fail=0/0 degraded=0
+[11-02 06:57:57.657][I][uds-client] state SYNCING -> ONLINE (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:57.658][I][http-api] REST :41371 ready（static= recordings=）
+[11-02 06:57:57.658][I][zlm] addStreamProxy cam1_main -> __defaultVhost__/live/cam1_main
+[11-02 06:57:57.658][I][zlm] addStreamProxy cam1_sub -> __defaultVhost__/live/cam1_sub
+[11-02 06:57:57.658][I][zlm] cam1 代理编排完成: main=__defaultVhost__/live/cam1_main sub=__defaultVhost__/live/cam1_sub
+[11-02 06:57:57.665][I][uds-client] state ONLINE -> DISCONNECTED (/tmp/aibox_t_http_api_12746.sock)
+[11-02 06:57:57.763][W][http-api] code=1001 invalid task JSON or body over 2 MiB
+[11-02 06:57:57.763][W][http-api] code=1001 invalid task JSON or body over 2 MiB
+http_api PASSED
+<end of output>
+Test time =   2.29 sec
+----------------------------------------------------------
+Test Passed.
+"http_api" end time: Nov 02 06:57 UTC
+"http_api" time elapsed: 00:00:02
+----------------------------------------------------------
+
+31/34 Testing: ws_hub
+31/34 Test: ws_hub
+Command: "/workspace/build-dev/test_ws_hub"
+Directory: /workspace/build-dev/tests
+"ws_hub" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+[diag] test_ws_hub v4 (handshake-3s-timeout + server-rx-log)
+[diag] >> handshake_and_frames enter
+[11-02 06:57:57.814][I][ws] WsServer listening 127.0.0.1:36165
+[11-02 06:57:57.814][I][ws] viewer connected: /ws/events (cam=0)
+[diag] << handshake_and_frames exit
+[diag] >> reference_counting enter
+[11-02 06:57:57.815][I][ws] WsServer listening 127.0.0.1:59185
+[11-02 06:57:57.815][I][ws] viewer connected: /ws/meta/7 (cam=7)
+[11-02 06:57:57.815][I][ws] viewer connected: /ws/meta/7 (cam=7)
+[diag] << reference_counting exit
+[diag] >> bad_path_rejected enter
+[11-02 06:57:58.021][I][ws] WsServer listening 127.0.0.1:43251
+[diag] << bad_path_rejected exit
+[diag] >> hook_server enter
+[11-02 06:57:58.021][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:58.023][I][hook] HookServer listening 127.0.0.1:41559
+[11-02 06:57:58.024][I][hook] on_stream_changed cam1_sub regist=1
+[11-02 06:57:58.024][I][hook] on_stream_changed cam2_sub regist=0
+[11-02 06:57:58.025][I][hook] 未实现 hook（回 code 0）: /hook/on_publish
+[diag] << hook_server exit
+ws_hub PASSED
+<end of output>
+Test time =   0.21 sec
+----------------------------------------------------------
+Test Passed.
+"ws_hub" end time: Nov 02 06:57 UTC
+"ws_hub" time elapsed: 00:00:00
+----------------------------------------------------------
+
+32/34 Testing: ws_limits
+32/34 Test: ws_limits
+Command: "/workspace/build-dev/test_ws_limits"
+Directory: /workspace/build-dev/tests
+"ws_limits" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+[11-02 06:57:58.027][I][ws] WsServer listening 127.0.0.1:52975
+[11-02 06:57:58.027][I][ws] viewer connected: /ws/meta/7 (cam=7)
+[11-02 06:57:58.029][I][ws] viewer connected: /ws/meta/8 (cam=8)
+[11-02 06:57:58.038][I][ws] WsServer listening 127.0.0.1:46751
+[11-02 06:57:58.038][I][ws] viewer connected: /ws/meta/7 (cam=7)
+[11-02 06:57:58.040][I][ws] viewer connected: /ws/meta/8 (cam=8)
+[11-02 06:57:58.049][I][ws] WsServer listening 127.0.0.1:44927
+[11-02 06:57:58.049][I][ws] viewer connected: /ws/events (cam=0)
+[11-02 06:57:58.053][I][ws] viewer connected: /ws/events (cam=0)
+[11-02 06:57:58.066][I][ws] WsServer listening 127.0.0.1:55819
+[11-02 06:57:58.066][I][ws] viewer connected: /ws/events (cam=0)
+[11-02 06:57:58.068][I][ws] viewer connected: /ws/events (cam=0)
+[11-02 06:57:58.073][I][ws] viewer connected: /ws/events (cam=0)
+[11-02 06:57:58.077][I][ws] viewer connected: /ws/events (cam=0)
+[11-02 06:57:58.082][I][ws] viewer connected: /ws/events (cam=0)
+[11-02 06:57:58.086][I][ws] viewer connected: /ws/events (cam=0)
+[11-02 06:57:58.090][I][ws] viewer connected: /ws/events (cam=0)
+[11-02 06:57:58.095][I][ws] viewer connected: /ws/events (cam=0)
+[11-02 06:57:58.099][I][ws] viewer connected: /ws/events (cam=0)
+[11-02 06:57:58.104][I][ws] viewer connected: /ws/events (cam=0)
+[11-02 06:57:58.119][I][ws] viewer connected: /ws/events (cam=0)
+[11-02 06:57:58.128][I][ws] WsServer listening 127.0.0.1:36909
+[11-02 06:57:58.332][I][ws] WsServer listening 127.0.0.1:36909
+[11-02 06:57:58.333][I][ws] viewer connected: /ws/meta/5 (cam=5)
+[11-02 06:57:58.335][I][ws] WsServer listening 127.0.0.1:53283
+[11-02 06:57:58.335][I][ws] viewer connected: /ws/events (cam=0)
+<end of output>
+Test time =   0.31 sec
+----------------------------------------------------------
+Test Passed.
+"ws_limits" end time: Nov 02 06:57 UTC
+"ws_limits" time elapsed: 00:00:00
+----------------------------------------------------------
+
+33/34 Testing: janitor
+33/34 Test: janitor
+Command: "/workspace/build-dev/test_janitor"
+Directory: /workspace/build-dev/tests
+"janitor" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+[diag] test_janitor v3 (fresh-file + drain-no-running + count=4)
+[11-02 06:57:58.341][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:58.344][I][janitor] sweep 删除 1 个切片文件
+[11-02 06:57:58.344][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:58.346][I][janitor] sweep 删除 1 个切片文件
+[11-02 06:57:58.346][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:58.348][I][janitor] sweep 删除 2 个切片文件
+[11-02 06:57:58.348][I][db] sqlite 3.45.1 threadsafe=1 fk=1
+[11-02 06:57:58.350][W][janitor] mqtt 未确认（保留重传）: topic=aibox/events/1
+[11-02 06:57:58.350][I][janitor] outbox 重传确认 3 条
+janitor PASSED
+<end of output>
+Test time =   0.01 sec
+----------------------------------------------------------
+Test Passed.
+"janitor" end time: Nov 02 06:57 UTC
+"janitor" time elapsed: 00:00:00
+----------------------------------------------------------
+
+34/34 Testing: onvif
+34/34 Test: onvif
+Command: "/workspace/build-dev/test_onvif"
+Directory: /workspace/build-dev/tests
+"onvif" start time: Nov 02 06:57 UTC
+Output:
+----------------------------------------------------------
+onvif PASSED
+<end of output>
+Test time =   0.00 sec
+----------------------------------------------------------
+Test Passed.
+"onvif" end time: Nov 02 06:57 UTC
+"onvif" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Nov 02 06:57 UTC
+
+businessd_phase1 =  27.78 sec*proc
+
+businessd_phase2 =  11.85 sec*proc
+

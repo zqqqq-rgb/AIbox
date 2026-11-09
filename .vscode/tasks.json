@@ -1,0 +1,141 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "AIBox: Build",
+      "type": "process",
+      "command": "cmake",
+      "args": [
+        "--build",
+        "${workspaceFolder}/build-dev",
+        "-j4"
+      ],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      },
+      "problemMatcher": "$gcc",
+      "windows": {
+        "command": "powershell.exe",
+        "args": [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          "${workspaceFolder}/scripts/dev.ps1",
+          "build"
+        ]
+      }
+    },
+    {
+      "label": "AIBox: Test C++",
+      "type": "process",
+      "command": "ctest",
+      "args": [
+        "--test-dir",
+        "${workspaceFolder}/build-dev",
+        "--output-on-failure"
+      ],
+      "group": "test",
+      "problemMatcher": [],
+      "windows": {
+        "command": "powershell.exe",
+        "args": [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          "${workspaceFolder}/scripts/dev.ps1",
+          "test"
+        ]
+      }
+    },
+    {
+      "label": "AIBox: Test Web",
+      "type": "process",
+      "command": "npm",
+      "args": [
+        "test",
+        "--prefix",
+        "${workspaceFolder}/web"
+      ],
+      "problemMatcher": [],
+      "windows": {
+        "command": "powershell.exe",
+        "args": [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          "${workspaceFolder}/scripts/dev.ps1",
+          "web-test"
+        ]
+      }
+    },
+    {
+      "label": "AIBox: Start Demo",
+      "type": "process",
+      "command": "python3",
+      "args": [
+        "${workspaceFolder}/tools/dev/demo.py",
+        "start"
+      ],
+      "dependsOn": "AIBox: Build",
+      "problemMatcher": [],
+      "windows": {
+        "command": "powershell.exe",
+        "args": [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          "${workspaceFolder}/scripts/dev.ps1",
+          "start"
+        ]
+      }
+    },
+    {
+      "label": "AIBox: Stop Demo",
+      "type": "process",
+      "command": "python3",
+      "args": [
+        "${workspaceFolder}/tools/dev/demo.py",
+        "stop"
+      ],
+      "problemMatcher": [],
+      "windows": {
+        "command": "powershell.exe",
+        "args": [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          "${workspaceFolder}/scripts/dev.ps1",
+          "stop"
+        ]
+      }
+    },
+    {
+      "label": "AIBox: Prepare Demo",
+      "type": "process",
+      "command": "python3",
+      "args": [
+        "${workspaceFolder}/tools/dev/demo.py",
+        "start-services"
+      ],
+      "dependsOn": "AIBox: Build",
+      "problemMatcher": [],
+      "windows": {
+        "command": "powershell.exe",
+        "args": [
+          "-NoProfile",
+          "-ExecutionPolicy",
+          "Bypass",
+          "-File",
+          "${workspaceFolder}/scripts/dev.ps1",
+          "debug-services"
+        ]
+      }
+    }
+  ]
+}

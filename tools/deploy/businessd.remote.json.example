@@ -1,0 +1,21 @@
+{
+  "http_port": 8080,
+  "ws_port": 8081,
+  "hook_port": 8090,
+  "bind_host": "127.0.0.1",
+  "uds_path": "/tmp/aibox-engine.sock",
+  "db_path": "/var/lib/aibox/businessd.db",
+  "static_dir": "/opt/aibox/web",
+  "recordings_dir": "/data/recordings",
+  "keep_days": 30,
+  "auth_token": "REPLACE_WITH_LONG_RANDOM_DEVICE_ACCESS_CREDENTIAL",
+  "public_base_url": "https://aibox.example.com",
+  "public_ws_url": "",
+  "public_media_signaling_path": "/media/index/api/webrtc",
+  "zlm": {
+    "host": "127.0.0.1",
+    "port": 8088,
+    "rtsp_port": 8554,
+    "secret": "REPLACE_WITH_ZLM_PRIVATE_API_SECRET"
+  }
+}

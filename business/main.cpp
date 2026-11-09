@@ -19,7 +19,7 @@
 //   degrade        → WS 广播 + LOGI
 //   registry_ready → algorithms 整表 replace + WS 广播
 //
-// 优雅退出：signal → retransmitter → janitor → ws → hook → http → uds → db
+// 优雅退出：停止配置准入/截图入队 → UDS → HTTP/执行器 → 截图 → 后台任务 → WS/Hook
 #include <signal.h>
 
 #include <sys/stat.h>
@@ -44,9 +44,11 @@
 #include "hook_server.h"
 #include "http_api.h"
 #include "janitor.h"
+#include "reconciler.h"
 #include "uds_client.h"
 #include "ws_server.h"
 #include "zlm_client.h"
+#include "access_session.h"
 
 namespace aibox {
 namespace {
@@ -58,6 +60,7 @@ void on_sig(int) { g_shutdown.store(true); }
 struct Config {
     int http_port = 80;
     int ws_port = 8081;
+    biz::WsServer::Limits ws_limits;
     int hook_port = 8090;
     std::string bind_host = "0.0.0.0";
     std::string uds_path = "/tmp/aibox-engine.sock";
@@ -65,6 +68,7 @@ struct Config {
     std::string static_dir;         // 空 = 不托管前端
     std::string recordings_dir;     // 空 = 不挂 /recordings
     std::string auth_token;         // 空 = 不鉴权
+    biz::RemoteAccessConfig remote;
     std::string version = "0.1.0";
     int npu_cores = 2;
     int64_t npu_mem_total_kb = 2097152;
@@ -98,18 +102,48 @@ struct Config {
         c.db_path = root.get("db_path", c.db_path).asString();
         c.static_dir = root.get("static_dir", c.static_dir).asString();
         c.recordings_dir = root.get("recordings_dir", c.recordings_dir).asString();
+        for (const char* name : {"auth_token", "public_base_url", "public_ws_url", "public_media_signaling_path"}) {
+            if (root.isMember(name) && !root[name].isString()) {
+                LOGE("main", "configuration field %s must be a string", name); std::exit(2);
+            }
+        }
         c.auth_token = root.get("auth_token", c.auth_token).asString();
+        c.remote.public_base_url = root.get("public_base_url", c.remote.public_base_url).asString();
+        c.remote.public_ws_url = root.get("public_ws_url", c.remote.public_ws_url).asString();
+        c.remote.public_media_signaling_path = root.get("public_media_signaling_path", c.remote.public_media_signaling_path).asString();
         c.version = root.get("version", c.version).asString();
         c.npu_cores = root.get("npu_cores", c.npu_cores).asInt();
         c.npu_mem_total_kb = root.get("npu_mem_total_kb", c.npu_mem_total_kb).asInt64();
         c.keep_days = root.get("keep_days", c.keep_days).asInt();
         c.mqtt_enabled = root.get("mqtt_enabled", c.mqtt_enabled).asBool();
+        if (root.isMember("ws_limits")) {
+            const auto& w = root["ws_limits"];
+            auto limit = [&](const char* name, size_t& target, size_t maximum) {
+                if (!w.isObject() || (w.isMember(name) &&
+                    (!w[name].isUInt64() || w[name].asUInt64() == 0 ||
+                     w[name].asUInt64() > maximum))) {
+                    LOGE("main", "invalid ws_limits.%s", name);
+                    std::exit(2);
+                }
+                if (w.isMember(name)) target = static_cast<size_t>(w[name].asUInt64());
+            };
+            limit("max_tx_frames", c.ws_limits.max_tx_frames, 65536);
+            limit("max_tx_bytes", c.ws_limits.max_tx_bytes, 64 * 1024 * 1024);
+            limit("max_frame_bytes", c.ws_limits.max_frame_bytes, 16 * 1024 * 1024);
+            limit("max_message_bytes", c.ws_limits.max_message_bytes, 16 * 1024 * 1024);
+            limit("max_handshake_bytes", c.ws_limits.max_handshake_bytes, 65536);
+            limit("max_connections", c.ws_limits.max_connections, 4096);
+        }
         if (root.isMember("zlm")) {
             const Json::Value& z = root["zlm"];
             c.zlm_host = z.get("host", c.zlm_host).asString();
             c.zlm_port = z.get("port", c.zlm_port).asInt();
             c.zlm_secret = z.get("secret", c.zlm_secret).asString();
             c.zlm_rtsp_port = z.get("rtsp_port", c.zlm_rtsp_port).asInt();
+        }
+        std::string access_error;
+        if (!biz::validate_remote_access(c.remote, c.auth_token, access_error)) {
+            LOGE("main", "invalid remote access configuration: %s", access_error.c_str()); std::exit(2);
         }
         return c;
     }
@@ -159,12 +193,18 @@ int run(const std::string& config_path) {
     if (!hook.start()) return 1;
 
     // 5. WsServer（对象先建：on_evt 闭包引用它；hooks 在 uds 构造后补挂再 start）
-    biz::WsServer ws(biz::WsServer::Hooks{});
+    biz::WsServer ws(biz::WsServer::Hooks{}, cfg.ws_limits);
+    biz::AccessSession::Params access_params;
+    access_params.token = cfg.auth_token;
+    access_params.public_origin = cfg.remote.public_base_url;
+    access_params.http_port = cfg.http_port;
+    auto access = std::make_shared<biz::AccessSession>(std::move(access_params));
+    ws.set_access(access);
 
     // ---- 事件快照线程（方案 A：ZLM getSnap 回环截图，独立于 UDS 接收线程）----
     // 队列元素 {事件行 id, 摄像头 id, 事件 ts}；getSnap 走本机回环拉已有代理流
     // （cam{id}_sub 常开，首帧即时返回）。独立线程的原因：on_evt 在 UDS 接收
-    // 线程同步执行，getSnap 最长 3s 会堵死事件分发 + ZlmClient 全局锁连锁阻塞
+    // 线程同步执行，getSnap 的 3s 拉流等待加 2s 传输余量会堵住事件分发与 ZLM 锁
     // HttpApi（板上实证：同步截导致"不报警"）
     struct SnapJob {
         int64_t event_id;
@@ -175,6 +215,7 @@ int run(const std::string& config_path) {
     std::condition_variable snap_cv;
     std::deque<SnapJob> snap_q;
     std::atomic<bool> snap_running{true};
+    std::atomic<uint64_t> snap_discarded{0};
     std::thread snap_th([&] {
         const std::string snap_dir =
             cfg.recordings_dir.empty() ? "" : cfg.recordings_dir + "/snap";
@@ -190,12 +231,13 @@ int run(const std::string& config_path) {
             {
                 std::unique_lock<std::mutex> lk(snap_mu);
                 snap_cv.wait_for(lk, std::chrono::milliseconds(500),
-                                 [&] { return !snap_q.empty(); });
+                                 [&] { return !snap_running.load() || !snap_q.empty(); });
+                if (!snap_running.load()) break;
                 if (snap_q.empty()) continue;
                 job = snap_q.front();
                 snap_q.pop_front();
             }
-            if (snap_dir.empty()) continue;  // 未配 recordings_dir：任务即弃
+            if (snap_dir.empty()) { ++snap_discarded; continue; }
             char file[600];
             std::snprintf(file, sizeof(file), "%s/cam%lld_%lld.jpg", snap_dir.c_str(),
                           static_cast<long long>(job.cam),
@@ -220,23 +262,34 @@ int run(const std::string& config_path) {
                      static_cast<long long>(job.event_id));
             }
         }
+        {
+            std::lock_guard<std::mutex> lock(snap_mu);
+            snap_discarded += snap_q.size();
+            snap_q.clear();
+        }
+        LOGI("main", "snapshot worker stopped; discarded=%llu",
+             static_cast<unsigned long long>(snap_discarded.load()));
     });
+
+    struct SnapshotJoinGuard {
+        std::atomic<bool>& running;
+        std::condition_variable& cv;
+        std::thread& thread;
+        ~SnapshotJoinGuard() {
+            running = false;
+            cv.notify_all();
+            if (thread.joinable()) thread.join();
+        }
+    } snapshot_guard{snap_running, snap_cv, snap_th};
 
     // 6. UDS 客户端（先于 HttpApi 构造：HttpApi::Deps 需要其指针；稍后 start）
     biz::UdsClient::Hooks uds_hooks;
-    uds_hooks.ensure_proxies = [&db, &zlm]() -> bool {
-        // ZLM 重启代理重建（详设 §5.7-5）：getMediaList 对比 DB，幂等逐台 ensure
-        bool all_ok = true;
-        for (const auto& cam : db.list_cameras(true)) {
-            std::string km, ks;
-            if (!zlm.add_camera_proxies(static_cast<int>(cam.id), cam.rtsp_main,
-                                        cam.rtsp_sub, &km, &ks)) {
-                all_ok = false;
-                continue;
-            }
-            db.set_camera_keys(cam.id, km, ks);
-        }
-        return all_ok;
+    uds_hooks.prepare_camera = [&db, &zlm](const biz::CameraConfigSnapshot& target) {
+        auto snapshots = db.reserved_config_snapshots(target.camera.id);
+        std::string previous;
+        for (size_t i = 1; i < snapshots.size(); i += 2)
+            if (!snapshots[i].empty()) { previous = snapshots[i]; break; }
+        return biz::reconcile_camera_media(db, zlm, target, previous);
     };
     uds_hooks.on_evt = [&](const proto::ParsedMsg& pm, const std::string& line) {
         if (pm.name == "detections") {
@@ -245,6 +298,8 @@ int run(const std::string& config_path) {
             biz::EventRow e;
             e.camera_id = pm.event.id;
             e.algo_id = pm.event.algo;
+            e.task_id = pm.event.task_id; e.rule_id = pm.event.rule_id;
+            e.task_revision = pm.event.task_revision; e.rule_version = pm.event.rule_version;
             e.type = pm.event.type;
             e.ts = pm.event.ts;
             e.snapshot_path = pm.event.snap;
@@ -265,7 +320,16 @@ int run(const std::string& config_path) {
             // ZlmClient 全局锁（HttpApi 的 ZLM 操作连锁阻塞，板上实证"不报警"）
             if (id > 0) {
                 std::lock_guard<std::mutex> lk(snap_mu);
-                snap_q.push_back({id, pm.event.id, pm.event.ts});
+                if (!snap_running || cfg.recordings_dir.empty()) {
+                    ++snap_discarded;
+                } else if (snap_q.size() < 128) {
+                    snap_q.push_back({id, pm.event.id, pm.event.ts});
+                    snap_cv.notify_one();
+                } else {
+                    ++snap_discarded;
+                    LOGW("main", "snapshot queue full; event %lld retained without snapshot",
+                         static_cast<long long>(id));
+                }
             }
             ws.broadcast(line);  // WS 弹窗
             if (cfg.mqtt_enabled && id > 0) {
@@ -289,14 +353,21 @@ int run(const std::string& config_path) {
             ws.broadcast(line);
         }
     };
-    biz::UdsClient uds(cfg.uds_path, db, std::move(uds_hooks),
-                       biz::UdsClient::Params{});  // 生产参数：1s 重连 / 5s ack / 5s 心跳
+    biz::UdsClient::Params uds_params;
+    uds_params.media_host = cfg.zlm_host;
+    uds_params.media_rtsp_port = cfg.zlm_rtsp_port;
+    biz::UdsClient uds(cfg.uds_path, db, std::move(uds_hooks), uds_params);
 
     // WS 订阅联动补挂（T4.5↔T4.7 关键接线，冒烟实证缺失则 detections 永不流通）：
     // viewer 首连 → sub_meta(engine)；全断 → unsub_meta。uds.start() 前完成，
     // 避免订阅竞态窗口
     ws.set_hooks({[&uds](uint32_t cam) { uds.sub_meta(cam, true); },
                   [&uds](uint32_t cam) { uds.sub_meta(cam, false); }});
+    // Close viewers/callbacks while their referenced UDS object is still alive on every exit.
+    struct WsStopGuard {
+        biz::WsServer& ws;
+        ~WsStopGuard() { ws.stop(); }
+    } ws_guard{ws};
     if (!ws.start(cfg.bind_host, cfg.ws_port)) return 1;
 
     // 4. HttpApi（uds 指针已就绪；先注册路由后 listen，start 前所有指针有效）
@@ -309,10 +380,17 @@ int run(const std::string& config_path) {
     api_deps.static_dir = cfg.static_dir;
     api_deps.recordings_dir = cfg.recordings_dir;
     api_deps.auth_token = cfg.auth_token;
+    api_deps.public_base_url = cfg.remote.public_base_url;
+    api_deps.public_ws_url = cfg.remote.public_ws_url;
+    api_deps.public_media_signaling_path = cfg.remote.public_media_signaling_path;
+    api_deps.access = access;
     api_deps.ws_port = cfg.ws_port;
     api_deps.npu_cores = cfg.npu_cores;
     api_deps.npu_mem_total_kb = cfg.npu_mem_total_kb;
     api_deps.version = cfg.version;
+    api_deps.media_host = cfg.zlm_host;
+    api_deps.media_rtsp_port = cfg.zlm_rtsp_port;
+    api_deps.ws = &ws;
     biz::HttpApi api(std::move(api_deps));
     if (!api.start()) return 1;
 
@@ -346,14 +424,14 @@ int run(const std::string& config_path) {
 
     // 优雅退出（反序）
     LOGI("main", "shutting down...");
-    api.set_ready(false);
-    uds.stop();
+    api.begin_shutdown();
     snap_running.store(false);
     snap_cv.notify_all();
+    uds.stop();
+    api.stop();
     if (snap_th.joinable()) snap_th.join();
     if (tx) tx->stop();
     janitor.stop();
-    api.stop();
     ws.stop();
     hook.stop();
     LOGI("main", "bye");

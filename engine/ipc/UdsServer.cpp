@@ -129,6 +129,12 @@ void UdsServer::on_cmd(const std::string& cmd, CmdHandler h) {
     handlers_[cmd] = std::move(h);
 }
 
+void UdsServer::disconnect_clients() {
+    std::lock_guard<std::mutex> lock(mutex_);
+    for (const auto& connection : conns_)
+        ::shutdown(connection.first, SHUT_RDWR);
+}
+
 void UdsServer::emit(const std::string& evt_json, uint32_t cam_id) {
     {
         std::lock_guard<std::mutex> lk(mutex_);

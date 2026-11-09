@@ -106,6 +106,17 @@ void run() {
     test_single_proxy_and_del();
     test_transport_failure();
     test_rollback_preserves_existing_main();
+    {
+        MockZlm mock;
+        mock.response_byte_delay_ms = 10;
+        CHECK(mock.start());
+        ZlmClient client({"127.0.0.1", mock.port(), "s", 60});
+        const auto start = std::chrono::steady_clock::now();
+        Json::Value list;
+        CHECK(!client.media_list(&list));
+        CHECK(std::chrono::steady_clock::now() - start < std::chrono::milliseconds(500));
+        mock.stop(); // Trickle traffic must not restart the timeout on every byte.
+    }
 }
 
 }  // namespace

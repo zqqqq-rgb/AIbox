@@ -5,6 +5,8 @@
 #pragma once
 
 #include <atomic>
+#include <deque>
+#include <functional>
 #include <map>
 #include <mutex>
 #include <set>
@@ -30,6 +32,16 @@ public:
     bool start(const std::string& path) { return uds_.start(path); }
     void stop() { uds_.stop(); }  // 关闭传输；新实例模拟 engine 进程丢失内存状态
     void emit(const std::string& evt_line) { uds_.emit(evt_line, 0); }
+    void emit_meta(uint32_t cam, const std::string& line) { uds_.emit(line, cam); }
+    void disconnect_clients() { uds_.disconnect_clients(); }
+    void command_boundary(std::function<void(const std::string&, bool)> callback) {
+        std::lock_guard<std::mutex> lock(mu_);
+        boundary_ = std::move(callback);
+    }
+    void respond_once(const std::string& command, int code) {
+        std::lock_guard<std::mutex> lock(mu_);
+        responses_[command].push_back(code);
+    }
 
     bool camera(uint32_t id, proto::AddCam& out, proto::SetAlgos& algos) const {
         std::lock_guard<std::mutex> lock(mu_);
@@ -44,6 +56,26 @@ public:
         std::lock_guard<std::mutex> lock(mu_);
         return commands_;
     }
+    void fail_algorithms(uint32_t id, bool fail) {
+        std::lock_guard<std::mutex> lock(mu_);
+        if (fail) script.fail_set_algos.insert(id); else script.fail_set_algos.erase(id);
+    }
+    // Deterministic seam after execution, before UdsServer delivers the ACK.
+    void after_set_algos(std::function<void()> callback) {
+        std::lock_guard<std::mutex> lock(mu_);
+        after_set_ = std::move(callback);
+    }
+    void metrics(const std::string& json) {
+        std::lock_guard<std::mutex> lock(mu_);
+        metrics_ = json;
+    }
+    void rule_v2(bool enabled) {
+        std::lock_guard<std::mutex> lock(mu_); supports_v2_=enabled;
+    }
+    void reset_state() {
+        std::lock_guard<std::mutex> lock(mu_);
+        cameras_.clear(); algos_.clear();
+    }
 
     Script script;
     std::atomic<int> add_cam{0};
@@ -53,13 +85,31 @@ public:
     std::atomic<int> get_metrics{0};
 
 private:
+    void boundary(const std::string& command, bool before) {
+        std::function<void(const std::string&, bool)> callback;
+        {
+            std::lock_guard<std::mutex> lock(mu_);
+            callback = boundary_;
+        }
+        if (callback) callback(command, before);
+    }
+    int scripted_code(const std::string& command) {
+        auto& codes = responses_[command];
+        if (codes.empty()) return 0;
+        const auto code = codes.front();
+        codes.pop_front();
+        return code;
+    }
     void register_cmds() {
         uds_.on_cmd("add_cam", [this](const proto::ParsedMsg& m) {
-            std::lock_guard<std::mutex> lock(mu_);
+            boundary("add_cam", true);
+            std::unique_lock<std::mutex> lock(mu_);
             commands_.push_back("add_cam:" + std::to_string(m.add_cam.id));
             ++add_cam;
             proto::Ack a;
-            if (script.fail_add_cam.count(m.add_cam.id)) {
+            a.ret = scripted_code("add_cam");
+            if (a.ret) { a.msg = "scripted add failure"; }
+            else if (script.fail_add_cam.count(m.add_cam.id)) {
                 a.ret = 1003;
                 a.msg = "fake fail";
             } else if (cameras_.count(m.add_cam.id)) {
@@ -68,14 +118,19 @@ private:
             } else {
                 cameras_[m.add_cam.id] = m.add_cam;
             }
+            lock.unlock();
+            boundary("add_cam", false);
             return a;
         });
-        uds_.on_cmd("set_algos", [this](const proto::ParsedMsg& m) {
-            std::lock_guard<std::mutex> lock(mu_);
-            commands_.push_back("set_algos:" + std::to_string(m.set_algos.id));
+        auto configure = [this](const proto::ParsedMsg& m) {
+            boundary(m.name, true);
+            std::unique_lock<std::mutex> lock(mu_);
+            commands_.push_back(m.name + ":" + std::to_string(m.set_algos.id));
             ++set_algos;
             proto::Ack a;
-            if (script.fail_set_algos.count(m.set_algos.id)) {
+            a.ret = m.name=="set_rules_v2" && !supports_v2_ ? 1003 : scripted_code(m.name);
+            if (a.ret) { a.msg = "scripted algorithm failure"; }
+            else if (script.fail_set_algos.count(m.set_algos.id)) {
                 a.ret = 1003;
                 a.msg = "fake fail";
             } else if (!cameras_.count(m.set_algos.id)) {
@@ -84,15 +139,34 @@ private:
             } else {
                 algos_[m.set_algos.id] = m.set_algos;
             }
+            auto callback = after_set_;
+            lock.unlock();
+            if (callback) callback();
+            boundary(m.name, false);
             return a;
+        };
+        uds_.on_cmd("set_algos",configure);
+        uds_.on_cmd("set_rules_v2",configure);
+        uds_.on_cmd("get_capabilities",[this](const proto::ParsedMsg&) {
+            std::lock_guard<std::mutex> lock(mu_);
+            proto::Ack ack;
+            if(supports_v2_) { ack.has_data=true; ack.data=proto::engine_capabilities_json(); }
+            else { ack.ret=1003; ack.msg="V2 unsupported"; }
+            return ack;
         });
         uds_.on_cmd("remove_cam", [this](const proto::ParsedMsg& m) {
-            std::lock_guard<std::mutex> lock(mu_);
+            boundary("remove_cam", true);
+            std::unique_lock<std::mutex> lock(mu_);
             commands_.push_back("remove_cam:" + std::to_string(m.remove_cam.id));
             ++remove_cam;
             proto::Ack ack;
-            if (!cameras_.erase(m.remove_cam.id)) ack.ret = 1002;
-            algos_.erase(m.remove_cam.id);
+            ack.ret = scripted_code("remove_cam");
+            if (!ack.ret) {
+                if (!cameras_.erase(m.remove_cam.id)) ack.ret = 1002;
+                algos_.erase(m.remove_cam.id);
+            }
+            lock.unlock();
+            boundary("remove_cam", false);
             return ack;
         });
         uds_.on_cmd("reload_algo", [this](const proto::ParsedMsg&) {
@@ -100,10 +174,11 @@ private:
             return proto::Ack{};
         });
         uds_.on_cmd("get_metrics", [this](const proto::ParsedMsg&) {
+            std::lock_guard<std::mutex> lock(mu_);
             ++get_metrics;
             proto::Ack a;
             a.has_data = true;
-            a.data = "{}";
+            a.data = metrics_;
             return a;
         });
     }
@@ -113,6 +188,11 @@ private:
     std::map<uint32_t, proto::AddCam> cameras_;
     std::map<uint32_t, proto::SetAlgos> algos_;
     std::vector<std::string> commands_;
+    std::function<void()> after_set_;
+    std::function<void(const std::string&, bool)> boundary_;
+    std::map<std::string, std::deque<int>> responses_;
+    std::string metrics_ = "{}";
+    bool supports_v2_=false;
 };
 
 }  // namespace testutil

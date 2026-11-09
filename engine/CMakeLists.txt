@@ -32,6 +32,7 @@ add_library(aibox_core STATIC
   model/AlgoPackage.cpp
   model/ModelRegistry.cpp
   rules/RuleEngine.cpp
+  rules/RuleRuntime.cpp
   arbiter/DegradeController.cpp
   track/TrackerHub.cpp
   ipc/Protocol.cpp
@@ -97,6 +98,12 @@ if(AIBOX_BUILD_HW)
 endif()
 
 # ---- core-engine：core + hw 装配（板端）----
+if(AIBOX_BUILD_TESTS)
+  add_executable(core-engine-fake main.cpp)
+  target_compile_definitions(core-engine-fake PRIVATE AIBOX_ENGINE_FAKE_ONLY=1)
+  target_link_libraries(core-engine-fake PRIVATE aibox_core pthread)
+endif()
+
 if(AIBOX_BUILD_ENGINE)
   if(NOT AIBOX_BUILD_HW)
     message(FATAL_ERROR "AIBOX_BUILD_ENGINE 需要 AIBOX_BUILD_HW=ON")

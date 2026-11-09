@@ -27,9 +27,10 @@ namespace aibox {
 struct AlarmEvent {
     uint32_t cam = 0;
     std::string event_type;
-    int64_t ts_ms = 0;  // 窗口首帧时间（防抖合并点，pts 域——内部逻辑用）
+    int64_t ts_ms = 0; // 窗口首帧时间（防抖合并点，pts 域——内部逻辑用）
     std::vector<proto::DetTarget> targets;
-    std::string algo;  // 触发算法（businessd 落库 events.algo_id 用）
+    std::string algo; // 触发算法（businessd 落库 events.algo_id 用）
+    uint64_t task_id = 0, rule_id = 0, task_revision = 0, rule_version = 0;
 };
 
 class RuleEngine {
@@ -38,11 +39,11 @@ public:
 
     struct Rule {
         Type type;
-        std::vector<std::pair<float, float>> polygon;  // 归一化 0~1（与 set_algos 一致）
-        uint32_t dwell_sec = 0;    // DWELL 驻留阈值
-        std::string event_type;    // 如 "intrusion" / "no_helmet"
-        uint32_t debounce_sec = 0; // 事件防抖窗
-        std::string algo;          // 触发算法 id（事件溯源）
+        std::vector<std::pair<float, float>> polygon; // 归一化 0~1（与 set_algos 一致）
+        uint32_t dwell_sec = 0;                       // DWELL 驻留阈值
+        std::string event_type;                       // 如 "intrusion" / "no_helmet"
+        uint32_t debounce_sec = 0;                    // 事件防抖窗
+        std::string algo;                             // 触发算法 id（事件溯源）
     };
 
     // RECONFIG 全量替换（set_algos 语义）；同时清空 track 状态（track_id 已重置）
@@ -54,23 +55,23 @@ public:
     void set_frame_size(uint32_t cam, uint32_t w, uint32_t h);
     std::vector<AlarmEvent> eval(uint32_t cam, const std::vector<proto::DetTarget>& targets,
                                  int64_t ts_ms);
-    void reset(uint32_t cam);  // 断流/RECONFIG 清空（last_fire 保留防抖语义，可一并清）
+    void reset(uint32_t cam); // 断流/RECONFIG 清空（last_fire 保留防抖语义，可一并清）
 
 private:
     struct TrackState {
-        bool inside = false;     // 稳定化内外态（连续 2 帧同向才翻转，非原始单帧判定）
-        bool armed = true;       // DWELL：离开区域后重新武装
+        bool inside = false; // 稳定化内外态（连续 2 帧同向才翻转，非原始单帧判定）
+        bool armed = true;   // DWELL：离开区域后重新武装
         int64_t dwell_start_ms = -1;
-        int32_t last_cls = -1;   // STATE_SWITCH
-        int32_t pend_in = 0;     // 连续"原始在内"帧数（滞后切换计数）
-        int32_t pend_out = 0;    // 连续"原始在外"帧数
-        bool born = false;        // 已做出生判定（每 track×规则一次性，首帧 eval 时置位）
-        bool grace_exempt = false;  // 出生豁免：true = 不受新 track 冷静期抑制
+        int32_t last_cls = -1;     // STATE_SWITCH
+        int32_t pend_in = 0;       // 连续"原始在内"帧数（滞后切换计数）
+        int32_t pend_out = 0;      // 连续"原始在外"帧数
+        bool born = false;         // 已做出生判定（每 track×规则一次性，首帧 eval 时置位）
+        bool grace_exempt = false; // 出生豁免：true = 不受新 track 冷静期抑制
     };
     struct ChanState {
         std::vector<Rule> rules;
         uint32_t frame_w = 0, frame_h = 0;
-        uint32_t eval_cnt = 0;  // 排障探针计数（每 N 次 eval 打一条状态）
+        uint32_t eval_cnt = 0; // 排障探针计数（每 N 次 eval 打一条状态）
         // key = track_id（<0 的裸检测跳过状态规则）；
         // value 按"规则下标"隔离——inside/dwell/last_cls 都是单条规则的语义，
         // 多条规则（如 REGION_IN + REGION_OUT 共用同一多边形）若共享一份状态，
@@ -85,13 +86,13 @@ private:
         // （短暂出去又回来）仍被压制
         struct RefireGuard {
             int64_t last_fire_ms = -1;
-            int64_t out_since_ms = -1;  // stable=0 的起始时刻（-1=在内）
+            int64_t out_since_ms = -1; // stable=0 的起始时刻（-1=在内）
         };
         std::map<std::pair<int32_t, size_t>, RefireGuard> refire;
         // track 末次出现时刻（真实离开检测）：跟踪器漏检期不输出目标（"检测在哪
         // 框哪"），同 id 消失 ≥ kReappearGapMs 后回归 = 真实离开后重现 → 重置该
         // track 全部规则状态——否则 inside 停留脏 true，离开-回归永不产生进入边沿
-        //（板上实证：报警一次后离开画面再进 ROI 不再报警）
+        // （板上实证：报警一次后离开画面再进 ROI 不再报警）
         std::map<int32_t, int64_t> track_last_ms;
         // 通道级末次有目标时刻（新 id 出生豁免判定的"场景繁忙"基准）：
         // 连续检测中（gap < kReappearGapMs）出生在 ROI 内的新 id 大概率是跟踪
@@ -113,4 +114,4 @@ private:
 bool point_in_polygon(float px, float py, const std::vector<std::pair<float, float>>& poly,
                       bool* on_edge = nullptr);
 
-}  // namespace aibox
+} // namespace aibox

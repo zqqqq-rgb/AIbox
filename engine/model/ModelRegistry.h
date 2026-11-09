@@ -34,13 +34,14 @@ public:
         std::function<std::shared_ptr<IPreproc>()> make_preproc;
         // pkg_dir：包目录（模型文件定位 = pkg_dir/manifest.model_file）
         // 返回 nullptr = load 失败（load 错误经 err 传出，进 disabled_reason）
-        std::function<std::shared_ptr<IInferEngine>(const AlgoManifest&,
-                                                    const std::string& pkg_dir,
+        std::function<std::shared_ptr<IInferEngine>(const AlgoManifest&, const std::string& pkg_dir,
                                                     std::string* err)>
             make_infer;
         // 输出解码闭包工厂：板上取 RknnEngine::out_hw + make_yolov8_post；
         // 返回空闭包 = 引擎直出 [n,6] 原图坐标（如 FakeInfer），注册表落 default_post
         std::function<PostFn(const AlgoManifest&, const IInferEngine&)> make_post;
+        std::function<ThresholdPostFn(const AlgoManifest&, const IInferEngine&)>
+            make_threshold_post;
     };
 
     ModelRegistry(std::string packages_root, RegistryDeps deps);
@@ -62,14 +63,14 @@ public:
     // engine 提供单模型 npu_cost_ms —— manifest 回填值或 selftest 实测，取其大）
     float cost_ms_of(const std::string& algo_id) const;
 
-    size_t size() const;  // 已注册条目数（含 disabled）
+    size_t size() const; // 已注册条目数（含 disabled）
 
 private:
     struct Entry {
-        AlgoPackage pkg;                      // manifest + 校验状态（ok/error）
-        std::shared_ptr<AlgoInstance> inst;   // ok 时非空
-        uint32_t mem_kb = 0;                  // ctx 内存估算 = 模型文件体积 KB（build 计算）
-        float selftest_cost_ms = 0.f;         // selftest 实测 rknn_run 中位
+        AlgoPackage pkg;                    // manifest + 校验状态（ok/error）
+        std::shared_ptr<AlgoInstance> inst; // ok 时非空
+        uint32_t mem_kb = 0;                // ctx 内存估算 = 模型文件体积 KB（build 计算）
+        float selftest_cost_ms = 0.f;       // selftest 实测 rknn_run 中位
     };
 
     // 构建 + 自检一个包目录；失败时填 err（不抛异常）
@@ -78,8 +79,8 @@ private:
 
     std::string root_;
     RegistryDeps deps_;
-    mutable std::mutex mu_;               // 冷路径锁（load/reload/snapshot）
-    std::map<std::string, Entry> entries_;  // key = algo_id
+    mutable std::mutex mu_;                // 冷路径锁（load/reload/snapshot）
+    std::map<std::string, Entry> entries_; // key = algo_id
 };
 
-}  // namespace aibox
+} // namespace aibox

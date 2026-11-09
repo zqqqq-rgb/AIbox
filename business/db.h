@@ -19,6 +19,7 @@
 
 #include "common/NonCopyable.h"
 #include "ipc/Protocol.h"  // RegistryReadyEvt（algorithms 整表同步）
+#include "task_types.h"
 
 struct sqlite3;
 struct sqlite3_stmt;
@@ -32,7 +33,7 @@ struct CameraRow {
     int64_t id = 0;
     std::string name, rtsp_main, rtsp_sub;
     std::string zlm_key_main, zlm_key_sub;  // MediaServer 代理 key（重启用，详设 §5.6）
-    bool enabled = true;                    // 0=逻辑删除
+    bool enabled = true;                    // Desired run state; deletion uses deleted_at.
     bool online = false;
     int64_t last_heartbeat = 0;             // 0=无
 };
@@ -60,6 +61,7 @@ struct EventRow {
     std::string snapshot_path;  // 快照路径（可空）
     std::string targets_json;
     bool reported = false;      // MQTT 上报成功置 1（outbox 对账，详设 §5.8）
+    int64_t task_id = 0, rule_id = 0, task_revision = 0, rule_version = 0;
 };
 
 struct SegmentRow {
@@ -81,16 +83,23 @@ struct CameraConfigState {
     int64_t desired_revision = 0, applied_revision = 0;
     std::string apply_status, last_error;
     int64_t deleted_at = 0, updated_at = 0;
+    std::string applied_config_json, media_main_url, media_sub_url; // Internal; credentials.
 };
 
-//保存目标版本、已确认版本、应用状态、错误和删除标记
+// Internal operation snapshots can contain RTSP credentials; public queries must redact them.
 struct ConfigOperationRow {
     std::string operation_id, op_type;
     int64_t camera_id = 0, target_revision = 0;
     std::string target_config_json, previous_applied_json;
     std::string status, last_error;
     int attempts = 0;
+    int error_code = 0;
     int64_t next_retry_at = 0, created_at = 0, updated_at = 0;
+};
+struct CameraConfigSnapshot;
+struct TaskDeployment {
+    int64_t camera_id = 0, task_revision = 0, target_revision = 0;
+    std::string operation_id;
 };
 
 // 算法库页/预检用的元数据（algorithms 全表投影）
@@ -108,7 +117,7 @@ class Db : public NonCopyable {
 public:
     // 最新 schema 版本（迁移脚本数组的长度；升版只改 db.cpp 的 kLatestVersion，
     // 本常量同步维护——测试/调用方断言 migrate() 返回值用它，勿硬编码）
-    static constexpr int kSchemaLatest = 4;
+    static constexpr int kSchemaLatest = 8;
 
     // path 传 ":memory:" 即内存库（单测）；否则为文件库（目录须已存在）
     explicit Db(const std::string& path);
@@ -179,12 +188,12 @@ public:
     bool set_camera_online(int64_t id, bool online);
     bool set_camera_keys(int64_t id, const std::string& k_main, const std::string& k_sub);
     bool get_camera(int64_t id, CameraRow& out);
-    std::vector<CameraRow> list_cameras(bool enabled_only);
-    bool logical_delete_camera(int64_t id);  // enabled=0（详设 §5.4 API4 副作用）
-    // 物理删除：先删 camera_algos 再删 cameras（外键 NO ACTION，顺序不可反）
+    std::vector<CameraRow> list_cameras(bool enabled_only, bool include_deleted = false);
+    bool logical_delete_camera(int64_t id);  // Legacy helper: enabled=0; new deletion uses an operation tombstone.
+    // 物理删除：先清理 legacy 任务及摄像头关联，再删 camera（外键顺序不可反）。
     bool delete_camera_cascade(int64_t id);
 
-    // ---- camera_algos ----
+    // ---- camera_algos: read-only compatibility view; setters adapt the legacy task ----
     bool set_camera_algos(int64_t cam, const std::vector<CamAlgoRow>& rows);  // 全量替换
     std::vector<CamAlgoRow> list_camera_algos(int64_t cam);
 
@@ -194,6 +203,30 @@ public:
                               ConfigOperationRow& operation, int64_t expected_revision);
     bool get_camera_config_state(int64_t cam, CameraConfigState& out);
     bool get_config_operation(const std::string& operation_id, ConfigOperationRow& out);
+    bool get_current_config_operation(int64_t cam, ConfigOperationRow& out);
+    std::vector<Capability> list_capabilities();
+    bool get_task(int64_t id, AlgorithmTask& out);
+    std::vector<AlgorithmTask> list_tasks();
+    bool save_task(AlgorithmTask& task, int64_t expected_revision);
+    bool delete_task(int64_t id, int64_t expected_revision);
+    std::vector<TaskDeployment> task_deployments(int64_t id);
+    bool task_runtime_settled(int64_t id);
+    bool submit_task_enabled(int64_t id, int64_t expected_revision, bool enabled,
+                             std::vector<ConfigOperationRow>& operations, int64_t at_ms = -1);
+    // Recompute all enabled schedule targets atomically; no network under the DB lock.
+    bool refresh_task_schedules(int64_t at_ms);
+    bool recover_config_operations();
+    std::vector<ConfigOperationRow> due_config_operations(int64_t now, int limit = 1);
+    std::vector<std::string> reserved_config_snapshots(int64_t cam);
+    bool claim_config_operation(const std::string& id);
+    bool finish_config_operation(const ConfigOperationRow& operation, const std::string& status,
+                                 int code, const std::string& error, int64_t retry_at = 0);
+    bool confirm_camera_replay(int64_t cam, int64_t revision, const std::string& snapshot);
+    bool set_camera_media(int64_t cam, bool main, const std::string& source,
+                          const std::string& key);
+    int pending_config_operations();
+    bool invalidate_runtime_config_states();
+    bool request_camera_replay(const CameraConfigSnapshot& target);
 
     // ---- algorithms（registry_ready 同步刷新，整表 replace，详设 §5.6）----
     bool replace_algorithms(const proto::RegistryReadyEvt& evt);
@@ -221,6 +254,9 @@ public:
     bool mark_event_reported(int64_t event_id);
 
 private:
+    bool submit_camera_config_impl(const CameraRow& target, const std::vector<CamAlgoRow>& algos,
+                                   ConfigOperationRow& operation, int64_t expected_revision,
+                                   int64_t at_ms = -1);
     bool set_camera_algos_impl(int64_t cam, const std::vector<CamAlgoRow>& rows);
     int schema_version();
     bool set_schema_version(int v);

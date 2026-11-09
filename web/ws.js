@@ -5,12 +5,19 @@
 // 重连：指数退避 1s→2s→4s→8s 封顶；连接状态经 onConnState/onState 通知
 //（页面据此 overlay.reset() 重新锚定——锚定只发生一次，重连必须重锚）
 
+import { websocketUrl } from './connection_model.js';
+
 const BACKOFF_MS = [1000, 2000, 4000, 8000];
+let connectionConfig = { ws_port: 8081 };
 
 function wsUrl(port, path) {
-    const host = location.hostname || '127.0.0.1';
-    const p = Number(port) || 8081;
-    return `ws://${host}:${p}${path}`;
+    return websocketUrl({ ...connectionConfig, ws_port: port }, path, location);
+}
+
+export function configureConnections(info) {
+    connectionConfig = { ws_port: info.ws_port || 8081, same_origin_ws: !!info.same_origin_ws,
+        public_ws_url: info.public_ws_url || '' };
+    evPort = connectionConfig.ws_port;
 }
 
 // ---- 通用连接器：指数退避重连 ----
@@ -68,6 +75,14 @@ export function stopEvents() {
     if (evConn) { evConn.close(); evConn = null; }
     evListeners.clear();
     connListeners.clear();
+}
+
+// Keep the application's event listeners so a fresh login can reconnect them.
+export function disconnectConnections() {
+    if (evConn) { evConn.close(); evConn = null; }
+    for (const slot of metaRefs.values()) slot.conn.close();
+    metaRefs.clear();
+    connListeners.forEach((fn) => fn('lost'));
 }
 
 // 注册事件监听，返回取消函数。evt 名 = engine 原始行的 "evt" 字段

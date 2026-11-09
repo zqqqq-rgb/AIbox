@@ -8,15 +8,20 @@
 
 ## 编译目标分层
 
+业务进程扩展进度（2026-11-02）：[第一阶段无硬件验收](doc/AIBox_businessd第一阶段第四批验收记录_2026-10-29.md)已完成；V2 [首批](doc/AIBox_businessd第二阶段首批实施记录_2026-10-29.md)提供草稿与预检，[第二批](doc/AIBox_businessd第二阶段第二批实施记录_2026-10-29.md)接入多规则引擎和来源事件，[第三批](doc/AIBox_businessd第二阶段第三批实施记录_2026-11-02.md)完成持久化启停和强杀恢复，[第四批](doc/AIBox_businessd第二阶段第四批实施记录_2026-11-02.md)接入每周时间计划、重连前窗口重算与算法任务页面。后端 34/34、前端 33/33、阶段烟测 8/8 通过，真件联调单列。
+
 | 目标         | 内容                       | 编译环境  |
 | ------------ | -------------------------- | --------- |
 | aibox_core   | 纯逻辑，零硬件头文件       | x86 / 板  |
 | aibox_hw     | MPP/RGA/RKNN 封装          | 仅板上    |
 | core-engine  | core + hw 装配             | 仅板上    |
+| core-engine-fake | 同一入口的 fake 装配（启用测试时构建） | x86 / 板 |
 | aibox_business | businessd 逻辑（REST/WS/SQLite/ZLM/UDS 客户端） | x86 / 板 |
 | businessd    | 业务进程                   | x86 / 板  |
 
 ## 构建
+
+Windows + VS Code 无板卡练习环境见 [Docker 开发环境说明](doc/VSCode_Docker开发环境.md)。在 PowerShell 执行 `./scripts/dev.ps1 setup`，随后 `./scripts/dev.ps1 start`，可启动业务进程、fake 引擎及媒体接口模拟器。
 
 ```bash
 # x86（开发机/CI）：只编 aibox_core + businessd

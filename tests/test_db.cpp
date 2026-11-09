@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #include "db.h"
+#include "config_compiler.h"
 #include "test_util.h"
 
 using namespace aibox;
@@ -40,7 +41,7 @@ namespace {
     } while (0)
 
 bool table_exists(Db& db, const char* name) {
-    auto st = db.prepare("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?1;");
+    auto st = db.prepare("SELECT count(*) FROM sqlite_master WHERE type IN ('table','view') AND name=?1;");
     if (!st) return false;
     if (!st->bind(1, name)) return false;
     if (!st->step()) return false;
@@ -72,9 +73,9 @@ void test_foreign_keys() {
         fprintf(stderr, "[skip] 本机 sqlite 不支持 foreign_keys，FK 用例跳过\n");
         return;
     }
-    // 外键：camera_algos 引用不存在的 camera → 插入失败
+    // Task sources, rather than the read-only compatibility view, enforce camera references.
     {
-        auto st = db.prepare("INSERT INTO camera_algos(camera_id, algo_id) VALUES(999, 'a');");
+        auto st = db.prepare("INSERT INTO task_cameras(task_id,camera_id) VALUES(999,999);");
         REQUIRE(st != nullptr);
         st->step();
         REQUIRE_MSG(!db.last_error().empty(), "外键应拒绝: %s",
@@ -373,7 +374,11 @@ void test_v4_migration_preserves_existing_data() {
     event.type = "retained";
     REQUIRE(db.insert_event(event) > 0);
     // Restore exactly the pre-v4 schema while preserving legacy business rows.
-    REQUIRE(db.exec("DROP TRIGGER camera_config_state_insert; DROP TABLE config_operations;"
+    REQUIRE(db.exec("CREATE TABLE old_camera_algos AS SELECT * FROM camera_algos; DROP VIEW camera_algos;"
+                    "DROP TRIGGER camera_legacy_task_insert; DROP TABLE task_schedules; DROP TABLE task_rules;"
+                    "DROP TABLE task_algorithms; DROP TABLE task_cameras; DROP TABLE task_deployments; DROP TABLE algorithm_tasks; DROP TABLE capabilities; DROP TABLE event_rule_sources;"
+                    "ALTER TABLE old_camera_algos RENAME TO camera_algos;"
+                    "DROP TRIGGER camera_config_state_insert; DROP TABLE config_operations;"
                     "DROP TABLE camera_config_state; UPDATE schema_meta SET version=3;"));
     REQUIRE(db.migrate() == Db::kSchemaLatest);
     REQUIRE(db.migrate() == Db::kSchemaLatest);
@@ -386,6 +391,17 @@ void test_v4_migration_preserves_existing_data() {
     CHECK(restored.name == "legacy" && !restored.enabled);
     CHECK(db.list_camera_algos(id).size() == 1);
     CHECK(db.list_events(id, "", 0, 0, 10).size() == 1);
+    REQUIRE(db.confirm_camera_replay(id, 0, encode_camera_config(restored, db.list_camera_algos(id))));
+    REQUIRE(db.get_camera_config_state(id, state));
+    CHECK(state.apply_status == "legacy_inactive");
+    REQUIRE(db.request_camera_replay({restored, db.list_camera_algos(id), false}));
+    auto pending = db.due_config_operations(INT64_MAX);
+    REQUIRE(pending.size() == 1);
+    CHECK(pending[0].op_type == "legacy_replay");
+    REQUIRE(db.claim_config_operation(pending[0].operation_id));
+    REQUIRE(db.finish_config_operation(pending[0], "succeeded", 0, ""));
+    REQUIRE(db.get_camera_config_state(id, state));
+    CHECK(state.apply_status == "legacy_inactive" && state.applied_revision == 1);
 }
 
 void test_durable_config_submission() {
@@ -453,9 +469,49 @@ void test_durable_config_submission() {
         CHECK(state.desired_revision == 2 && state.apply_status == "pending");
         ConfigOperationRow read;
         REQUIRE(reopened.get_config_operation("op-1", read));
-        CHECK(read.status == "pending");
+        CHECK(read.status == "superseded");
     }
     ::unlink(path.c_str());
+}
+
+void test_operation_claim_recovery_and_revision_guards() {
+    Db db(":memory:"); REQUIRE(db.migrate() == Db::kSchemaLatest);
+    CameraRow target; target.name = "created atomically";
+    ConfigOperationRow first;
+    first.operation_id = "atomic-create"; first.op_type = "create";
+    REQUIRE(db.submit_camera_config(target, {}, first, 0));
+    CHECK(first.camera_id > 0 && db.list_cameras(false).size() == 1);
+    CameraConfigSnapshot decoded; REQUIRE(decode_camera_config(first.target_config_json, decoded));
+    CHECK(decoded.camera.id == first.camera_id);
+    // A duplicate operation id rolls back even the newly allocated camera and trigger row.
+    CHECK(!db.submit_camera_config(target, {}, first, 0));
+    CHECK(db.list_cameras(false).size() == 1);
+    REQUIRE(db.claim_config_operation(first.operation_id));
+    target.id = first.camera_id; target.name = "newer target";
+    ConfigOperationRow second; second.operation_id = "new-target"; second.op_type = "update";
+    REQUIRE(db.submit_camera_config(target, {}, second, 1));
+    CHECK(!db.finish_config_operation(first, "succeeded", 0, ""));
+    CHECK(!db.confirm_camera_replay(target.id, 1, first.target_config_json));
+    CameraConfigState state; REQUIRE(db.get_camera_config_state(target.id, state));
+    CHECK(state.desired_revision == 2 && state.applied_revision == 0);
+    REQUIRE(db.claim_config_operation(second.operation_id));
+    REQUIRE(db.recover_config_operations()); // Simulate a process exit after claim, before result.
+    ConfigOperationRow recovered; REQUIRE(db.get_config_operation(second.operation_id, recovered));
+    CHECK(recovered.status == "retry_wait" && recovered.attempts == 1);
+    REQUIRE(db.claim_config_operation(second.operation_id));
+    REQUIRE(db.exec("CREATE TRIGGER block_confirmation BEFORE UPDATE OF applied_revision "
+                    "ON camera_config_state BEGIN SELECT RAISE(FAIL, 'test confirmation'); END;"));
+    CHECK(!db.finish_config_operation(second, "succeeded", 0, ""));
+    ConfigOperationRow unconfirmed;
+    REQUIRE(db.get_config_operation(second.operation_id, unconfirmed));
+    CHECK(unconfirmed.status == "running"); // The prior operation UPDATE rolled back too.
+    REQUIRE(db.get_camera_config_state(target.id, state));
+    CHECK(state.applied_revision == 0);
+    REQUIRE(db.exec("DROP TRIGGER block_confirmation;"));
+    REQUIRE(db.finish_config_operation(second, "succeeded", 0, ""));
+    REQUIRE(db.get_camera_config_state(target.id, state));
+    CHECK(state.applied_revision == 2 && state.apply_status == "succeeded");
+    CHECK(state.applied_config_json == second.target_config_json);
 }
 
 void run() {
@@ -472,6 +528,7 @@ void run() {
     test_transaction_failures();
     test_v4_migration_preserves_existing_data();
     test_durable_config_submission();
+    test_operation_claim_recovery_and_revision_guards();
 }
 
 }  // namespace

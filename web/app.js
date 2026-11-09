@@ -1,15 +1,38 @@
-// app.js —— 哈希路由 + 七页面装配（前端设计 §3 布局 / §5 页面设计）
-// 路由表（详设 §6.1）：#/grid #/cameras #/algos #/config #/events #/recordings #/settings
+// app.js —— 哈希路由 + 八页面装配（前端设计 §3 布局 / §5 页面设计）
+// 路由表：#/grid #/cameras #/algos #/config #/tasks #/events #/recordings #/settings
 // 页面契约：render(params) → { el, unmount }；unmount 必须
 //   destroy 全部 player / stop overlay / release 全部 WS 租借 / off 事件（性能纪律 §8-1）
 import { api, ApiError } from './api.js';
-import { onEvent, onConnState, acquireMeta, startEvents } from './ws.js';
+import { onEvent, onConnState, acquireMeta, startEvents, configureConnections, disconnectConnections } from './ws.js';
 import { toast, confirmModal, badge, tri, h, fmtMs, fmtUptime } from './ui.js';
 import { CamPlayer } from './player.js';
 import { MetaOverlay } from './overlay.js';
 import { colorOf } from './overlay_core.js';
+import { pageTasks } from './task_page.js';
+import { installAccessGate } from './access.js';
+import { scanRequest } from './connection_model.js';
 
 const $view = () => document.getElementById('view');
+let appReady = false;
+async function watchConfiguration(data, changed, active) {
+    if (!data?.pending || !data.operation_id) return;
+    for (let attempt = 0; attempt < 60 && active(); ++attempt) {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        if (!active()) return;
+        try {
+            const operation = await api.getOperation(data.operation_id);
+            if (!active()) return;
+            if (operation.status === 'succeeded') {
+                toast('配置已生效', 'ok'); changed?.(operation); return;
+            }
+            if (operation.status === 'failed' || operation.status === 'superseded') {
+                toast(operation.status === 'failed' ? `配置未生效：${operation.last_error}` : '配置已被后续修改替代', 'warn');
+                changed?.(operation); return;
+            }
+        } catch (_) { /* Keep the saved operation queryable after transient network errors. */ }
+    }
+    if (active()) toast('配置仍在等待执行，可在设备页查看状态', 'warn');
+}
 let currentPage = null;   // { unmount }
 let classesOf = {};       // cls → 类名（registry_ready 时刷新）
 
@@ -17,6 +40,7 @@ let classesOf = {};       // cls → 类名（registry_ready 时刷新）
 const ROUTES = {
     '/grid': pageGrid, '/cameras': pageCameras, '/algos': pageAlgos,
     '/config': pageConfig, '/events': pageEvents,
+    '/tasks': pageTasks,
     '/recordings': pageRecordings, '/settings': pageSettings,
 };
 
@@ -28,6 +52,7 @@ function parseHash() {
 
 let routeSeq = 0;         // 路由序号：快速连点导航时丢弃过期页面的异步结果
 async function route() {
+    if (!appReady) return;
     const seq = ++routeSeq;
     if (currentPage) {
         try { currentPage.unmount && currentPage.unmount(); } catch (e) { console.error(e); }
@@ -74,6 +99,7 @@ function renderTopbar(info, res) {
 }
 
 async function pollTopbar() {
+    if (!appReady) return;
     try {
         const [info, res] = await Promise.all([
             api.systemInfo({ silent: true }),
@@ -208,7 +234,7 @@ async function pageGrid(params) {
     $view().appendChild(wrap);
     tri(view, 'loading');
 
-    const cams = await api.listCameras();
+    const cams = (await api.listCameras()).filter((c) => c.enabled !== false);
     const focusId = Number(params.cam) || 0;
     // 宫格规模取 hash query（#/grid?n=4），缺省 9；单路放大恒 1
     const N = focusId ? 1 : ([1, 4, 9].includes(Number(params.n)) ? Number(params.n) : 9);
@@ -291,9 +317,27 @@ async function pageCameras() {
 
     const cards = h('div', 'cam-cards');  // 已添加摄像头
     const scanArea = h('div', '');        // 扫描结果区（点击扫描后出现）
-    wrap.append(head, cards, scanArea);
+    const scanControls = h('div', 'panel scan-controls');
+    const interfaceLabel = h('label', '', '扫描网卡');
+    const interfaceSelect = h('select');
+    interfaceSelect.appendChild(new Option('自动选择本机网卡', ''));
+    interfaceLabel.appendChild(interfaceSelect);
+    const cidrLabel = h('label', '', '扫描范围（选填）');
+    const cidrInput = h('input'); cidrInput.placeholder = '默认扫描选中网卡所在网段';
+    cidrLabel.appendChild(cidrInput);
+    const timeoutLabel = h('label', '', '等待时间');
+    const timeoutSelect = h('select');
+    for (const seconds of [3, 5, 10]) timeoutSelect.appendChild(new Option(`${seconds} 秒`, String(seconds * 1000)));
+    timeoutLabel.appendChild(timeoutSelect);
+    const scopeHint = h('p', 'dim small', '扫描由盒子在现场网络执行；发现设备后仍需验证账号与取流。');
+    scanControls.append(interfaceLabel, cidrLabel, timeoutLabel, scopeHint);
+    wrap.append(head, scanControls, cards, scanArea);
     $view().appendChild(wrap);
 
+    let active = true;
+    let scanSequence = 0;
+    let scanTimer = null;
+    let interfaces = [];
     let addedIps = new Set();   // 已添加设备 IP 集合（扫描结果"已添加"标记）
     let lastDevices = [];       // 最近一次扫描结果（添加成功后重渲染状态）
 
@@ -315,8 +359,13 @@ async function pageCameras() {
         card.dataset.cam = String(c.id);
         const top = h('div', 'cc-top');
         top.append(badge(!!c.online), h('span', 'mono dim', `cam${c.id}`), h('b', 'cc-name', c.name));
+        if (c.enabled === false) top.appendChild(h('span', 'dim small', '已停用'));
+        if (['pending', 'running', 'retry_wait'].includes(c.apply_status))
+            top.appendChild(h('span', 'warn-txt small', '等待生效'));
+        else if (c.apply_status === 'failed') top.appendChild(h('span', 'warn-txt small', '应用失败'));
         card.appendChild(top);
-        card.appendChild(h('div', 'cc-url dim mono ellipsis', c.rtsp_main));
+        const safeUrl = String(c.rtsp_main || '').replace(/(rtsp:\/\/)[^/]*@/i, '$1***@');
+        card.appendChild(h('div', 'cc-url dim mono ellipsis', safeUrl));
         const foot = h('div', 'cc-foot');
         foot.appendChild(h('span', 'dim small', `算法 ${(c.algos || []).length} 项`));
         const btns = h('span', 'btns');
@@ -328,12 +377,13 @@ async function pageCameras() {
         delBtn.onclick = async () => {
             if (!(await confirmModal({
                 title: `删除 cam${c.id} ${c.name}？`,
-                body: '将级联：ZLM 拉流代理 ×2 + engine 通道 + 配置记录（逻辑删）',
+                body: '停止该摄像头的分析、预览和录像；保留历史事件及录像记录。',
                 danger: true,
             }))) return;
             try {
-                await api.deleteCamera(c.id);
-                toast('已删除', 'ok');
+                const data = await api.deleteCamera(c.id);
+                if (!data.pending) toast('已删除', 'ok');
+                watchConfiguration(data, reload, () => cards.isConnected);
                 renderDevices();  // 该设备从"已添加"集合移除后刷新扫描卡片
                 reload();
             } catch (_) {}
@@ -350,9 +400,10 @@ async function pageCameras() {
         try {
             cams = await api.listCameras();
         } catch (_) {
-            tri(cards, 'error', { onRetry: reload });
+            if (active) tri(cards, 'error', { onRetry: reload });
             return;
         }
+        if (!active) return;
         addedIps = new Set(cams.map((c) => ipOf(c.rtsp_sub) || ipOf(c.rtsp_main)));
         cards.innerHTML = '';
         if (!cams.length) {
@@ -368,7 +419,7 @@ async function pageCameras() {
         const isRtsp = d.kind === 'rtsp';
         const kindTxt = isRtsp
             ? `RTSP 设备${d.hik ? '（疑似海康）' : '（未开 ONVIF）'}`
-            : 'ONVIF 设备';
+            : d.confirmed === false ? '候选设备，待认证确认' : 'ONVIF 设备';
         const card = h('div', `cam-card dev-card ${added ? 'cc-off' : ''}`);
         const top = h('div', 'cc-top');
         top.append(h('span', 'dot ' + (added ? 'd-ok' : 'd-acc')), h('b', 'mono', d.ip));
@@ -395,29 +446,70 @@ async function pageCameras() {
     }
 
     async function scan() {
+        if (!active || scanBtn.disabled) return;
+        let options;
+        try { options = scanRequest(interfaceSelect.value, cidrInput.value, timeoutSelect.value); }
+        catch (failure) { toast(failure.message, 'warn'); return; }
+        const sequence = ++scanSequence;
+        lastDevices = [];
         scanArea.innerHTML = '';
         const sec = h('div', 'panel');
         sec.appendChild(h('h3', '', '网络扫描结果'));
+        const summary = h('p', 'dim scan-summary', '正在查找设备…');
+        summary.setAttribute('role', 'status'); sec.appendChild(summary);
         const grid = h('div', 'cam-cards');
         sec.appendChild(grid);
         scanArea.appendChild(sec);
         tri(grid, 'loading');
         scanBtn.disabled = true;
+        interfaceSelect.disabled = true; cidrInput.disabled = true; timeoutSelect.disabled = true;
+        const started = Date.now();
+        scanTimer = setInterval(() => {
+            summary.textContent = `正在查找设备，已等待 ${Math.floor((Date.now() - started) / 1000)} 秒…`;
+        }, 1000);
         try {
-            const data = await api.scanCameras();
+            const data = await api.scanCameras(options);
+            if (!active || sequence !== scanSequence) return;
             lastDevices = data.devices || [];
+            const counts = Number.isFinite(data.target_count) ? `，已尝试 ${data.attempted_count || 0}/${data.target_count} 个地址` : '';
+            summary.textContent = `发现 ${lastDevices.length} 个候选设备${counts}${data.timed_out ? '；等待时间已到，当前结果可能不完整' : ''}。`;
+            for (const warning of data.warnings || []) sec.insertBefore(h('p', 'warn-txt small', warning), grid);
             grid.innerHTML = '';
             if (!lastDevices.length) {
-                tri(grid, 'empty', { emptyText: '未发现设备（需与盒子同网段，且相机开启 ONVIF）' });
+                tri(grid, 'empty', { emptyText: '未发现设备。请检查所选网卡、相机网段和发现功能；也可手动填写取流地址。' });
             } else {
                 for (const d of lastDevices) grid.appendChild(devCard(d));
             }
-        } catch (_) {
+        } catch (failure) {
+            if (!active || sequence !== scanSequence) return;
+            summary.textContent = `扫描未完成：${failure.message}`;
             tri(grid, 'error', { onRetry: scan });
         } finally {
-            scanBtn.disabled = false;
+            clearInterval(scanTimer); scanTimer = null;
+            if (active && sequence === scanSequence) {
+                scanBtn.disabled = false;
+                interfaceSelect.disabled = false; cidrInput.disabled = false; timeoutSelect.disabled = false;
+            }
         }
     }
+    interfaceSelect.onchange = () => {
+        const selected = interfaces.find((value) => value.name === interfaceSelect.value);
+        cidrInput.value = '';
+        cidrInput.placeholder = selected ? `默认范围属于 ${selected.cidr}` : '自动选择时留空';
+    };
+    api.scanInterfaces().then((data) => {
+        if (!active) return;
+        interfaces = data.interfaces || [];
+        const seen = new Set();
+        for (const value of interfaces) {
+            if (seen.has(value.name)) continue;
+            seen.add(value.name);
+            interfaceSelect.appendChild(new Option(`${value.name} · ${value.address}`, value.name));
+        }
+        if (!interfaces.length) scopeHint.textContent = '盒子没有可扫描网卡，请检查现场网络；手动添加仍可使用。';
+    }).catch(() => {
+        if (active) scopeHint.textContent = '网卡信息暂不可用，可重进本页刷新或使用默认扫描。';
+    });
     scanBtn.onclick = scan;
     addBtn.onclick = () => cameraForm(null);
 
@@ -453,7 +545,8 @@ async function pageCameras() {
                 try {
                     const data = await api.addCamera({ name, rtsp_main: uris.rtsp_main, rtsp_sub: uris.rtsp_sub, enabled: true });
                     mask.remove();
-                    toast(`已添加（id=${data.id}）`, 'ok');
+                    toast(data.pending ? `配置已保存，等待连接确认（id=${data.id}）` : `已添加（id=${data.id}）`, data.pending ? 'warn' : 'ok');
+                    watchConfiguration(data, reload, () => active);
                     if (data.note) toast(data.note, 'warn', 8000);
                     addedIps.add(d.ip);
                     renderDevices();
@@ -514,7 +607,8 @@ async function pageCameras() {
             try {
                 const data = await api.addCamera({ name, rtsp_main: uri(main), rtsp_sub: uri(sub), enabled: true });
                 mask.remove();
-                toast(`已添加（id=${data.id}）`, 'ok');
+                toast(data.pending ? `配置已保存，等待连接确认（id=${data.id}）` : `已添加（id=${data.id}）`, data.pending ? 'warn' : 'ok');
+                watchConfiguration(data, reload, () => active);
                 if (data.note) toast(data.note, 'warn', 8000);
                 addedIps.add(d.ip);
                 renderDevices();
@@ -548,8 +642,7 @@ async function pageCameras() {
             mask.querySelector('#f-name').value = cam.name || '';
             mask.querySelector('#f-main').value = cam.rtsp_main || '';
             mask.querySelector('#f-sub').value = cam.rtsp_sub || '';
-            // enabled 不在 GET /api/cameras 回包（只有 online），编辑默认勾选
-            mask.querySelector('#f-en').checked = true;
+            mask.querySelector('#f-en').checked = cam.enabled !== false;
         }
         mask.querySelector('#f-cancel').onclick = () => mask.remove();
         mask.addEventListener('click', (e) => { if (e.target === mask) mask.remove(); });
@@ -564,7 +657,8 @@ async function pageCameras() {
             try {
                 const data = isEdit ? await api.updateCamera(cam.id, body) : await api.addCamera(body);
                 mask.remove();
-                toast(isEdit ? '已保存' : `已添加（id=${data.id}）`, 'ok');
+                if (!data.pending) toast(isEdit ? '已保存并生效' : `已添加（id=${data.id}）`, 'ok');
+                watchConfiguration(data, reload, () => cards.isConnected);
                 // engine add 失败但代理已建：后端 data.note 黄色警示（前端设计 §5.2）
                 if (data && data.note) toast(data.note, 'warn', 8000);
                 reload();
@@ -574,7 +668,7 @@ async function pageCameras() {
     }
 
     await reload();
-    return { unmount() { offHandlers.forEach((f) => f()); } };
+    return { unmount() { active = false; ++scanSequence; clearInterval(scanTimer); offHandlers.forEach((f) => f()); } };
 }
 
 // ============================================================ #/config
@@ -854,7 +948,11 @@ async function pageConfig(params) {
             const e = data && data.npu_est;
             est.textContent = e ? `NPU 预估：算力 ${Math.round(e.compute_pct)}% · 内存 ${Math.round(e.mem_pct)}%` : '';
             est.className = `mono ${e && (e.compute_pct > 80 || e.mem_pct > 80) ? 'warn-txt' : 'dim'}`;
-            toast('已热生效（通道 RECONFIG）', 'ok');
+            if (data.pending) est.textContent = '配置已保存，等待设备执行';
+            else toast('配置已生效', 'ok');
+            watchConfiguration(data, (operation) => {
+                est.textContent = operation.status === 'succeeded' ? '配置已生效' : '配置未生效，请检查后重试';
+            }, () => wrap.isConnected);
         } catch (_) {}
     };
 
@@ -1245,9 +1343,24 @@ async function pageSettings() {
 // ============================================================ boot
 // DOM 守卫：node 导入安全（模块测试防语法朽坏），浏览器中正常 boot
 if (typeof document !== 'undefined') {
-    loadClasses();
-    bootTopbar();
-    // 无 hash：赋值即触发 hashchange → route（勿再显式调用，防双渲染）
-    if (!location.hash) location.hash = '#/grid';
-    else route();
+    let topbarStarted = false;
+    installAccessGate({
+        async onAuthenticated() {
+            const info = await api.systemInfo({ silent: true });
+            configureConnections(info);
+            appReady = true;
+            loadClasses();
+            if (!topbarStarted) { bootTopbar(); topbarStarted = true; }
+            else pollTopbar();
+            if (!location.hash) location.hash = '#/grid';
+            else route();
+        },
+        onExpired() {
+            appReady = false; ++routeSeq;
+            currentPage?.unmount?.(); currentPage = null;
+            disconnectConnections();
+            $view().replaceChildren();
+            document.getElementById('modal-root')?.replaceChildren();
+        },
+    });
 }

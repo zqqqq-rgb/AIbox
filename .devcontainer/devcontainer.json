@@ -1,0 +1,25 @@
+{
+  "name": "AIBox Linux Development",
+  "image": "aibox-dev:ubuntu24.04",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+  "workspaceFolder": "/workspace",
+  "mounts": [
+    "source=aibox-dev-build,target=/workspace/build-dev,type=volume",
+    "source=aibox-dev-node-modules,target=/workspace/web/node_modules,type=volume"
+  ],
+  "forwardPorts": [8080, 8081, 8090],
+  "portsAttributes": {"8080": {"label": "AIBox Web / REST", "onAutoForward": "notify"}},
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-vscode.cpptools", "ms-vscode.cmake-tools", "ms-python.python"],
+      "settings": {
+        "cmake.buildDirectory": "${workspaceFolder}/build-dev",
+        "cmake.configureSettings": {"AIBOX_BUILD_TESTS": "ON", "CMAKE_BUILD_TYPE": "Debug"},
+        "C_Cpp.default.compileCommands": "${workspaceFolder}/build-dev/compile_commands.json"
+      }
+    }
+  },
+  "postCreateCommand": "bash tools/dev/setup.sh",
+  "remoteUser": "root",
+  "shutdownAction": "stopContainer"
+}

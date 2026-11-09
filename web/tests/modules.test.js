@@ -29,6 +29,7 @@ describe('T5.2 模块导入', () => {
         // app.js 顶层在无 DOM 环境不 boot（typeof document 守卫）
         const app = await import('../app.js');
         expect(app).toBeTruthy();
+        expect(typeof (await import('../task_page.js')).pageTasks).toBe('function');
     });
 
     it('api.js 错误码兜底文案（详设 §8.2）', async () => {

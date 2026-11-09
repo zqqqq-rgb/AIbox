@@ -71,10 +71,11 @@ public:
     bool media_list(Json::Value* out);         // data 为数组（app/stream/... 条目）
     bool get_server_config(Json::Value* out);  // data 为对象（启动自检比对）
 
-    // —— 截图（ROI 编辑底图，事件快照 V1 未接）——
+    // —— 截图（ROI 编辑底图、事件快照）——
     // getSnap 单帧 JPEG；url = 任一 ZLM 可拉取的流地址（调用方传摄像头 rtsp_sub）。
     // 成功 true 且 jpeg 为完整 JPEG（0xFFD8 开头）；失败 false（离线/超时/错误 JSON）。
-    // timeout_sec：getSnap 侧首帧拉流等待；HTTP 层超时 = timeout_sec + 2s 兜底
+    // timeout_sec：首帧等待；HTTP 连接/发送/接收共享 timeout_sec + 2s 截止时间。
+    // 域名解析仍由系统 resolver 负责；默认本地 IPv4，不承诺远程 DNS 的硬退出时限。
     bool get_snap(const std::string& url, int timeout_sec, std::string* jpeg);
 
 private:

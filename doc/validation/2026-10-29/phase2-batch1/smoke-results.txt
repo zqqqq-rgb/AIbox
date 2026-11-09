@@ -1,0 +1,21 @@
+Internal ctest changing into directory: /tmp/aibox-build
+Test project /tmp/aibox-build
+    Start 18: db
+1/4 Test #18: db ...............................   Passed    0.10 sec
+    Start 19: config_compiler
+2/4 Test #19: config_compiler ..................   Passed    0.00 sec
+    Start 20: tasks
+3/4 Test #20: tasks ............................   Passed    0.05 sec
+    Start 26: http_api
+4/4 Test #26: http_api .........................   Passed    2.30 sec
+
+100% tests passed, 0 tests failed out of 4
+
+Label Time Summary:
+businessd_phase1    =   2.40 sec*proc (3 tests)
+businessd_phase2    =   2.45 sec*proc (4 tests)
+
+Total Test time (real) =   2.45 sec
+[check-headers] OK —— aibox_core 无硬件头文件
+PASS: V2 draft/legacy adapter/compiler foundation
+SKIP: engine rule arrays, per-rule runtime source events, scheduled runtime application and board integration

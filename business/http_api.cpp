@@ -13,6 +13,7 @@
 #include <exception>
 #include <fstream>
 #include <map>
+#include <limits>
 #include <sstream>
 #include <sys/statvfs.h>
 #include <sys/types.h>
@@ -20,15 +21,28 @@
 
 #include "common/Log.h"
 #include "config_compiler.h"
+#include "camera_service.h"
 #include "http_compat.h"
 #include "onvif_client.h"
 #include "uds_client.h"
 #include "zlm_client.h"
+#include "ws_server.h"
+#include "task_service.h"
+#include "access_session.h"
 
 namespace aibox {
 namespace biz {
 
 namespace {
+
+int64_t parse_id(const std::string& text) {
+    int64_t value=0;
+    for(char ch:text) {
+        if(ch<'0'||ch>'9'||value>(std::numeric_limits<int64_t>::max()-(ch-'0'))/10) return -1;
+        value=value*10+(ch-'0');
+    }
+    return value>0?value:-1;
+}
 
 int64_t steady_ms() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
@@ -48,6 +62,14 @@ bool parse_body(const std::string& body, Json::Value* out) {
     std::unique_ptr<Json::CharReader> rd(b.newCharReader());
     std::string errs;
     return rd->parse(body.data(), body.data() + body.size(), out, &errs);
+}
+
+bool parse_task_body(const std::string& body, Json::Value* out) {
+    if(body.size()>2*1024*1024) return false;
+    Json::CharReaderBuilder builder;
+    builder["failIfExtra"]=true; builder["rejectDupKeys"]=true; builder["allowComments"]=false;
+    std::unique_ptr<Json::CharReader> reader(builder.newCharReader()); std::string error;
+    return reader->parse(body.data(),body.data()+body.size(),out,&error);
 }
 
 // 解析 DB 内 JSON 文本片段（roi/rule 落库形态）为 Json::Value；空串/坏 JSON → false
@@ -81,6 +103,28 @@ void reply_data(httplib::Response& res, const Json::Value& data) {
 void reply_err(httplib::Response& res, int code, const std::string& msg) {
     LOGW("http-api", "code=%d %s", code, msg.c_str());
     reply(res, code, msg);
+}
+
+void reply_configuration(httplib::Response& res, const ConfigurationResult& result, bool created = false) {
+    Json::Value data;
+    data["id"] = static_cast<Json::Int64>(result.camera_id);
+    data["ok"] = result.code == 0;
+    data["accepted"] = result.accepted;
+    data["operation_id"] = result.operation_id;
+    data["target_revision"] = static_cast<Json::Int64>(result.revision);
+    data["apply_status"] = result.apply_status;
+    data["pending"] = result.accepted && result.apply_status != "succeeded" &&
+                      result.apply_status != "failed" && result.apply_status != "superseded";
+    data["npu_est"]["compute_pct"] = result.compute_pct;
+    data["npu_est"]["mem_pct"] = result.mem_pct;
+    if (created) {
+        Json::Value probe;
+        probe["ok"] = false;
+        probe["note"] = "未执行码流预探测";
+        data["probe"]["main"] = probe;
+        data["probe"]["sub"] = probe;
+    }
+    reply(res, result.code, result.message, &data);
 }
 
 // ---- 系统资源采样（/proc 直读，纯 Linux；~10s 周期前端轮询差分足够）----
@@ -217,82 +261,66 @@ std::string basename_of(const std::string& p) {
 
 }  // namespace
 
-// ---- NPU 预检（纯函数）----
-
-namespace {
-
-double compute_pct_of(const std::vector<PrecheckUsage>& usages,
-                      const std::map<std::string, PrecheckModel>& models,
-                      int npu_cores) {
-    std::map<std::string, int> fps_sum;
-    for (const auto& u : usages)
-        if (u.fps > 0) fps_sum[u.algo_id] += u.fps;
-    double cost = 0;
-    for (const auto& kv : fps_sum) {
-        const auto it = models.find(kv.first);
-        if (it != models.end()) cost += it->second.cost_ms * kv.second;
-    }
-    const double denom = npu_cores * 1000.0 * 0.8;  // ms/s × 80% 水位
-    return denom > 0 ? cost / denom * 100.0 : 0.0;
-}
-
-}  // namespace
-
-PrecheckResult npu_precheck(const PrecheckInput& in) {
-    std::map<std::string, PrecheckModel> models;
-    for (const auto& m : in.models) models[m.algo_id] = m;
-
-    PrecheckResult r;
-    r.compute_pct = compute_pct_of(in.usages, models, in.npu_cores);
-
-    // 内存：去重物理模型 Σ ctx
-    std::map<std::string, int> seen;
-    int64_t mem = 0;
-    for (const auto& u : in.usages) {
-        if (seen[u.algo_id]++) continue;
-        const auto it = models.find(u.algo_id);
-        if (it != models.end()) mem += it->second.mem_kb;
-    }
-    r.mem_pct = in.npu_mem_total_kb > 0
-                    ? static_cast<double>(mem) /
-                          (static_cast<double>(in.npu_mem_total_kb) * 0.8) * 100.0
-                    : 0.0;
-
-    r.ok = r.compute_pct <= 100.0 && r.mem_pct <= 100.0;
-    if (r.ok) return r;
-
-    if (r.compute_pct > 100.0) {
-        r.code = 3001;
-        // 建议：focus_cam 的勾选逐档降 fps（→3 / →1）试算，取首个达标档
-        for (int target : {3, 1}) {
-            std::vector<PrecheckUsage> trial = in.usages;
-            for (auto& u : trial)
-                if (u.cam == in.focus_cam && u.fps > target) u.fps = target;
-            const double pct = compute_pct_of(trial, models, in.npu_cores);
-            if (pct <= 100.0) {
-                std::ostringstream os;
-                os << "cam" << in.focus_cam << " fps →" << target
-                   << " 可降至" << static_cast<int>(pct + 0.5) << "%";
-                r.msg = os.str();
-                return r;
-            }
-        }
-        r.msg = "请降低检测 fps 或减少勾选通道";
-    } else {
-        r.code = 3002;
-        r.msg = "NPU 内存预检超限，请减少勾选的模型数";
-    }
-    return r;
-}
-
 // ---- HttpApi ----
 
-HttpApi::HttpApi(Deps d) : d_(std::move(d)), start_steady_ms_(steady_ms()) {}
+HttpApi::HttpApi(Deps d) : d_(std::move(d)), start_steady_ms_(steady_ms()) {
+    RemoteAccessConfig remote{d_.public_base_url, d_.public_ws_url, d_.public_media_signaling_path};
+    std::string remote_error;
+    if (validate_remote_access(remote, d_.auth_token, remote_error)) {
+        d_.public_base_url = remote.public_base_url;
+        d_.public_ws_url = remote.public_ws_url;
+    }
+    if (!d_.access) {
+        AccessSession::Params access;
+        access.token = d_.auth_token;
+        access.public_origin = d_.public_base_url;
+        access.http_port = d_.http_port;
+        d_.access = std::make_shared<AccessSession>(std::move(access));
+    }
+    CameraService::Params params;
+    params.reconciler.media_host = d_.media_host;
+    params.reconciler.media_port = d_.media_rtsp_port;
+    params.reconciler.retry_ms = d_.configuration_retry_ms;
+    params.npu_cores = d_.npu_cores;
+    params.npu_mem_kb = d_.npu_mem_total_kb;
+    params.apply_wait_ms = d_.configuration_wait_ms;
+    cameras_ = std::make_unique<CameraService>(*d_.db, *d_.uds, *d_.zlm, params);
+}
 
 HttpApi::~HttpApi() { stop(); }
 
 bool HttpApi::start() {
+    if (th_.joinable()) return true;
+    RemoteAccessConfig remote{d_.public_base_url, d_.public_ws_url, d_.public_media_signaling_path};
+    std::string config_error;
+    if (!validate_remote_access(remote, d_.auth_token, config_error)) {
+        LOGE("http-api", "invalid remote access configuration: %s", config_error.c_str());
+        return false;
+    }
+    d_.public_base_url = remote.public_base_url;
+    d_.public_ws_url = remote.public_ws_url;
+    stopping_ = false;
     svr_ = std::make_unique<httplib::Server>();
+    svr_->set_pre_routing_handler([this](const httplib::Request& req, httplib::Response& res) {
+        const bool api = req.path == "/api" || req.path.rfind("/api/", 0) == 0;
+        const bool evidence = req.path == "/recordings" || req.path.rfind("/recordings/", 0) == 0;
+        const bool public_auth = req.path == "/api/auth/status" || req.path == "/api/auth/login";
+        if ((api || evidence) && !public_auth) {
+            if (!auth_ok(req)) {
+                res.status = 401; reply_err(res, 1001, "authentication required");
+                res.set_header("Cache-Control", "no-store");
+                return httplib::Server::HandlerResponse::Handled;
+            }
+            if (d_.access->required() && !d_.access->bearer_valid(req.get_header_value("Authorization")) &&
+                req.method != "GET" && req.method != "HEAD" && req.method != "OPTIONS" &&
+                !d_.access->origin_allowed(req.get_header_value("Origin"), req.get_header_value("Host"))) {
+                res.status = 403; reply_err(res, 1001, "request origin is not allowed");
+                return httplib::Server::HandlerResponse::Handled;
+            }
+            if (d_.access->required()) res.set_header("Cache-Control", "private, no-store");
+        }
+        return httplib::Server::HandlerResponse::Unhandled;
+    });
     register_routes();
     if (!d_.static_dir.empty()) svr_->set_mount_point("/", d_.static_dir.c_str());
     if (!d_.recordings_dir.empty())
@@ -302,6 +330,7 @@ bool HttpApi::start() {
         svr_.reset();
         return false;
     }
+    if (!cameras_->start()) { svr_.reset(); return false; }
     port_ = d_.http_port;
     th_ = std::thread([this] { svr_->listen_after_bind(); });
     LOGI("http-api", "REST :%d ready（static=%s recordings=%s）", port_,
@@ -310,131 +339,46 @@ bool HttpApi::start() {
 }
 
 void HttpApi::stop() {
+    begin_shutdown();
     if (svr_) svr_->stop();
     if (th_.joinable()) th_.join();
+    cameras_->stop();
     svr_.reset();
 }
 
+void HttpApi::begin_shutdown() {
+    stopping_ = true;
+    ready_ = false;
+    cameras_->begin_shutdown();
+}
+
 bool HttpApi::auth_ok(const httplib::Request& req) const {
-    if (d_.auth_token.empty()) return true;  // 首版局域网：无鉴权
-    const std::string expect = "Bearer " + d_.auth_token;
-    return req.get_header_value("Authorization") == expect;
+    return d_.access->authenticated(req.get_header_value("Authorization"), req.get_header_value("Cookie"));
 }
 
 // 预检输入收集：其他通道取 db 现状 + focus_cam 用本次请求覆盖
-bool HttpApi::build_precheck_input(int cam, const std::vector<CamAlgoRow>& new_cfg,
-                                   PrecheckInput* out, std::string* err) {
-    for (const auto& m : d_.db->list_algorithms_meta()) {
-        if (m.disabled) continue;
-        out->models.push_back({m.algo_id, m.npu_cost_ms, m.npu_mem_kb});
-    }
-    for (const auto& c : d_.db->list_cameras(true)) {
-        if (c.id == cam) continue;
-        for (const auto& a : d_.db->list_camera_algos(c.id)) {
-            if (!a.enabled) continue;
-            out->usages.push_back({a.algo_id, static_cast<int>(c.id), a.detect_fps});
-        }
-    }
-    for (const auto& a : new_cfg) {
-        if (!a.enabled) continue;
-        out->usages.push_back({a.algo_id, cam, a.detect_fps});
-    }
-    // 算法未注册 → engine 必拒 1002，预检前置拦截给出更明确错误
-    for (const auto& a : new_cfg) {
-        if (!a.enabled) continue;
-        bool known = false;
-        for (const auto& m : out->models)
-            if (m.algo_id == a.algo_id) known = true;
-        if (!known) {
-            *err = "algo not available: " + a.algo_id;
-            return false;
-        }
-    }
-    out->focus_cam = cam;
-    out->npu_cores = d_.npu_cores;
-    out->npu_mem_total_kb = d_.npu_mem_total_kb;
-    return true;
-}
-
 // ---- PUT /api/cameras/{id}（改名/改 rtsp/启停；详设 §5.4-3）----
 // body 已由分发点解析（板上 httplib 可能截断 req.path，分发依据=请求体）
 
 void HttpApi::handle_put_camera(const httplib::Request& req, httplib::Response& res,
                                 int64_t id, const Json::Value& body) {
     (void)req;
-    CameraRow cam;
-    if (!d_.db->get_camera(id, cam)) {
-        reply_err(res, 1002, "camera not found");
-        return;
-    }
-    const std::string old_main = cam.rtsp_main, old_sub = cam.rtsp_sub;
-    const bool old_enabled = cam.enabled;
-    if (body.isMember("name")) cam.name = body["name"].asString();
-    if (body.isMember("rtsp_main")) cam.rtsp_main = body["rtsp_main"].asString();
-    if (body.isMember("rtsp_sub")) cam.rtsp_sub = body["rtsp_sub"].asString();
-    if (body.isMember("enabled")) cam.enabled = body["enabled"].asInt() != 0;
-    const bool rtsp_changed = cam.rtsp_main != old_main || cam.rtsp_sub != old_sub;
-    const bool enabled_changed = cam.enabled != old_enabled;
-    proto::SetAlgos algos;
-    std::string compile_error;
-    if (cam.enabled && (rtsp_changed || enabled_changed) &&
-        !compile_algos(static_cast<uint32_t>(id), d_.db->list_camera_algos(id),
-                       algos, compile_error)) {
-        reply_err(res, 1001, compile_error);
-        return;
-    }
-
-    // rtsp 变更：先删旧代理再建新（同名流不先删会被 ensure 幂等分支吞掉新 URL）
-    if (rtsp_changed) {
-        if (!cam.zlm_key_main.empty()) d_.zlm->del_proxy(cam.zlm_key_main);
-        if (!cam.zlm_key_sub.empty()) d_.zlm->del_proxy(cam.zlm_key_sub);
-        std::string km, ks;
-        if (!d_.zlm->add_camera_proxies(static_cast<int>(id), cam.rtsp_main, cam.rtsp_sub,
-                                        &km, &ks)) {
-            reply_err(res, 4002, "ZLM 重建代理失败（旧代理已删，可重试或删除摄像头）");
-            return;
+    if (!body.isObject()) { reply_err(res, 1001, "expected camera object"); return; }
+    CameraPatch patch;
+    for (const char* key : {"name", "rtsp_main", "rtsp_sub"})
+        if (body.isMember(key) && !body[key].isString()) {
+            reply_err(res, 1001, "invalid camera field"); return;
         }
-        if (!d_.db->set_camera_keys(id, km, ks)) {
-            reply_err(res, 5001, "persist camera proxy keys failed");
-            return;
+    if (body.isMember("name")) patch.name = body["name"].asString();
+    if (body.isMember("rtsp_main")) patch.rtsp_main = body["rtsp_main"].asString();
+    if (body.isMember("rtsp_sub")) patch.rtsp_sub = body["rtsp_sub"].asString();
+    if (body.isMember("enabled")) {
+        if (!body["enabled"].isBool() && !body["enabled"].isInt()) {
+            reply_err(res, 1001, "invalid enabled field"); return;
         }
+        patch.enabled = body["enabled"].asInt() != 0;
     }
-    if (!d_.db->update_camera(cam)) {
-        reply_err(res, 5001, "persist camera failed");
-        return;
-    }
-    // engine 侧重建（enabled 时）
-    if (rtsp_changed || enabled_changed) {
-        proto::RemoveCam rc;
-        rc.id = static_cast<uint32_t>(id);
-        const auto removed = d_.uds->remove_cam(rc);
-        if (removed.ret != 0 && removed.ret != 1002) {
-            reply_err(res, removed.ret, "engine remove_cam failed: " + removed.msg);
-            return;
-        }
-        if (cam.enabled) {
-            proto::AddCam ac;
-            ac.id = static_cast<uint32_t>(id);
-            ac.rtsp_sub = cam.rtsp_sub;
-            ac.rtsp_main = cam.rtsp_main;
-            ac.has_rtsp_main = true;
-            const proto::Ack ack = d_.uds->add_cam(ac);
-            if (ack.ret != 0) {
-                reply_err(res, ack.ret,
-                          "engine add_cam 失败：" +
-                              (ack.msg.empty() ? std::string("unknown") : ack.msg));
-                return;
-            }
-            const auto applied = d_.uds->set_algos(algos);
-            if (applied.ret != 0) {
-                reply_err(res, applied.ret, "engine set_algos failed: " + applied.msg);
-                return;
-            }
-        }
-    }
-    Json::Value data(Json::objectValue);
-    data["ok"] = true;
-    reply_data(res, data);
+    reply_configuration(res, cameras_->update(id, patch));
 }
 
 // ---- PUT /api/cameras/{id}/algos（预检闸门1，详设 §5.4 细节）----
@@ -442,11 +386,6 @@ void HttpApi::handle_put_camera(const httplib::Request& req, httplib::Response& 
 void HttpApi::handle_put_algos(const httplib::Request& req, httplib::Response& res,
                                int64_t id, const Json::Value& body) {
     (void)req;
-    CameraRow cam;
-    if (!d_.db->get_camera(id, cam) || !cam.enabled) {
-        reply_err(res, 1002, "camera not found or disabled");
-        return;
-    }
     if (!body.isMember("algos") || !body["algos"].isArray()) {
         reply_err(res, 1001, "需要 algos[]");
         return;
@@ -492,44 +431,45 @@ void HttpApi::handle_put_algos(const httplib::Request& req, httplib::Response& r
         r.enabled = a.get("enabled", 1).asInt() != 0;
         cfgs.push_back(std::move(r));
     }
-    proto::SetAlgos sa;
-    std::string compile_error;
-    if (!compile_algos(static_cast<uint32_t>(id), cfgs, sa, compile_error)) {
-        reply_err(res, 1001, compile_error);
-        return;
-    }
-    // 预检（闸门1，架构 §11.4.3）
-    PrecheckInput pin;
-    std::string perr;
-    if (!build_precheck_input(static_cast<int>(id), cfgs, &pin, &perr)) {
-        reply_err(res, 1002, perr);
-        return;
-    }
-    const PrecheckResult pc = npu_precheck(pin);
-    if (!pc.ok) {
-        reply_err(res, pc.code, pc.msg);  // 3001/3002 + 建议文案（§4-T4.4 断言）
-        return;
-    }
-    // 先 engine 后 DB：engine 拒绝（1002/1003）则 DB 不留悬空配置
-    const proto::Ack ack = d_.uds->set_algos(sa);
-    if (ack.ret != 0) {
-        reply_err(res, ack.ret, ack.msg.empty() ? "engine set_algos 失败" : ack.msg);
-        return;
-    }
-    if (!d_.db->set_camera_algos(id, cfgs)) {
-        reply_err(res, 5001, "persist camera algorithms failed");
-        return;
-    }
-    Json::Value data(Json::objectValue);
-    data["ok"] = true;
-    Json::Value est(Json::objectValue);
-    est["compute_pct"] = pc.compute_pct;
-    est["mem_pct"] = pc.mem_pct;
-    data["npu_est"] = est;
-    reply_data(res, data);
+    reply_configuration(res, cameras_->set_algos(id, cfgs));
 }
 
 void HttpApi::register_routes() {
+    svr_->Get("/api/auth/status", [this](const httplib::Request& req, httplib::Response& res) {
+        Json::Value data;
+        data["auth_required"] = d_.access->required();
+        data["authenticated"] = auth_ok(req);
+        res.set_header("Cache-Control", "no-store");
+        reply_data(res, data);
+    });
+    svr_->Post("/api/auth/login", [this](const httplib::Request& req, httplib::Response& res) {
+        res.set_header("Cache-Control", "no-store");
+        if (!d_.access->origin_allowed(req.get_header_value("Origin"), req.get_header_value("Host"), true)) {
+            res.status = 403; reply_err(res, 1001, "request origin is not allowed"); return;
+        }
+        Json::Value body;
+        if (req.body.size() > 4096 || !parse_task_body(req.body, &body) || !body.isObject() ||
+            body.size() != 1 || !body["token"].isString() || body["token"].asString().size() > 2048) {
+            reply_err(res, 1001, "expected a token string"); return;
+        }
+        if (!d_.access->required()) {
+            Json::Value data; data["authenticated"] = true; data["auth_required"] = false;
+            reply_data(res, data); return;
+        }
+        const std::string id = d_.access->login(body["token"].asString());
+        if (id.empty()) { res.status = 401; reply_err(res, 1001, "invalid credential or session limit reached"); return; }
+        d_.access->logout(req.get_header_value("Cookie"));
+        res.set_header("Set-Cookie", d_.access->cookie_header(id));
+        Json::Value data; data["authenticated"] = true; data["auth_required"] = true;
+        reply_data(res, data);
+    });
+    svr_->Post("/api/auth/logout", [this](const httplib::Request& req, httplib::Response& res) {
+        d_.access->logout(req.get_header_value("Cookie"));
+        res.set_header("Set-Cookie", d_.access->clear_cookie_header());
+        res.set_header("Cache-Control", "no-store");
+        Json::Value data; data["authenticated"] = !d_.access->required();
+        reply_data(res, data);
+    });
     // 统一鉴权 + 未匹配 API 记录
     // Generic callback supports board exception& and distro exception_ptr APIs.
     svr_->set_exception_handler([](const httplib::Request&, httplib::Response& res,
@@ -545,85 +485,91 @@ void HttpApi::register_routes() {
                 reply_err(res, 1001, "unauthorized");
                 return;
             }
+            if (stopping_ && req.method != "GET" && req.method != "HEAD" && req.method != "OPTIONS") {
+                Json::Value data(Json::objectValue);
+                data["accepted"] = false;
+                reply(res, 1003, "businessd is stopping", &data);
+                return;
+            }
             handler(req, res);
         };
     };
 
-    // ---- 1. POST /api/cameras ----
-    svr_->Post("/api/cameras", auth_wrap([this](const httplib::Request& req,
-                                                httplib::Response& res) {
+    svr_->Get("/api/auth/check", auth_wrap([](const httplib::Request&, httplib::Response& res) {
+        Json::Value data; data["authenticated"] = true;
+        res.set_header("Cache-Control", "no-store"); reply_data(res, data);
+    }));
+
+    // Task drafts and previews do not send engine commands. Legacy writes keep using CameraService.
+    auto task_reply=[](httplib::Response& res,const TaskResult& result) { reply(res,result.code,result.message,&result.data); };
+    svr_->Get("/api/capabilities",auth_wrap([this](const httplib::Request&,httplib::Response& res) {
+        TaskService tasks(*d_.db,d_.npu_cores,d_.npu_mem_total_kb,cameras_.get()); reply_data(res,tasks.capabilities());
+    }));
+    svr_->Get("/api/tasks",auth_wrap([this](const httplib::Request&,httplib::Response& res) {
+        TaskService tasks(*d_.db,d_.npu_cores,d_.npu_mem_total_kb,cameras_.get()); reply_data(res,tasks.list());
+    }));
+    svr_->Get(R"(/api/tasks/(\d+))",auth_wrap([this,task_reply](const httplib::Request& req,httplib::Response& res) {
+        const auto id=parse_id(req.matches[1].str());
+        TaskService tasks(*d_.db,d_.npu_cores,d_.npu_mem_total_kb,cameras_.get()); task_reply(res,tasks.get(id));
+    }));
+    svr_->Post("/api/tasks",auth_wrap([this,task_reply](const httplib::Request& req,httplib::Response& res) {
+        Json::Value body; if(!parse_task_body(req.body,&body)) { reply_err(res,1001,"invalid task JSON or body over 2 MiB"); return; }
+        TaskService tasks(*d_.db,d_.npu_cores,d_.npu_mem_total_kb,cameras_.get()); task_reply(res,tasks.save(0,body));
+    }));
+    svr_->Put(R"(/api/tasks/(\d+))",auth_wrap([this,task_reply](const httplib::Request& req,httplib::Response& res) {
+        Json::Value body; if(!parse_task_body(req.body,&body)) { reply_err(res,1001,"invalid task JSON or body over 2 MiB"); return; }
+        TaskService tasks(*d_.db,d_.npu_cores,d_.npu_mem_total_kb,cameras_.get()); task_reply(res,tasks.save(parse_id(req.matches[1].str()),body));
+    }));
+    svr_->Delete(R"(/api/tasks/(\d+))",auth_wrap([this,task_reply](const httplib::Request& req,httplib::Response& res) {
+        Json::Value body; if(!parse_task_body(req.body,&body)) { reply_err(res,1001,"expected task revision"); return; }
+        TaskService tasks(*d_.db,d_.npu_cores,d_.npu_mem_total_kb,cameras_.get()); task_reply(res,tasks.remove(parse_id(req.matches[1].str()),body));
+    }));
+    svr_->Put(R"(/api/tasks/(\d+)/enabled)",auth_wrap([this,task_reply](const httplib::Request& req,httplib::Response& res) {
         Json::Value body;
-        if (!parse_body(req.body, &body) || !body.isMember("name") ||
-            !body.isMember("rtsp_main") || !body.isMember("rtsp_sub")) {
-            reply_err(res, 1001, "需要 name/rtsp_main/rtsp_sub");
-            return;
+        if(!parse_task_body(req.body,&body)) { reply_err(res,1001,"invalid task transition JSON"); return; }
+        TaskService tasks(*d_.db,d_.npu_cores,d_.npu_mem_total_kb,cameras_.get());
+        task_reply(res,tasks.set_enabled(parse_id(req.matches[1].str()),body));
+    }));
+    svr_->Post("/api/tasks/preview",auth_wrap([this,task_reply](const httplib::Request& req,httplib::Response& res) {
+        Json::Value body; if(!parse_task_body(req.body,&body)) { reply_err(res,1001,"invalid preview JSON or body over 2 MiB"); return; }
+        TaskService tasks(*d_.db,d_.npu_cores,d_.npu_mem_total_kb,cameras_.get()); task_reply(res,tasks.preview(body));
+    }));
+
+    svr_->Post("/api/cameras", auth_wrap([this](const httplib::Request& req, httplib::Response& res) {
+        Json::Value body;
+        if (!parse_body(req.body, &body) || !body.isObject() ||
+            !body["name"].isString() || !body["rtsp_main"].isString() || !body["rtsp_sub"].isString() ||
+            (body.isMember("enabled") && !body["enabled"].isBool() && !body["enabled"].isInt())) {
+            reply_err(res, 1001, "expected name/rtsp_main/rtsp_sub"); return;
         }
-        CameraRow cam;
-        cam.name = body["name"].asString();
-        cam.rtsp_main = body["rtsp_main"].asString();
-        cam.rtsp_sub = body["rtsp_sub"].asString();
-        cam.enabled = body.get("enabled", 1).asInt() != 0;
-        if (cam.name.empty() || cam.rtsp_main.empty() || cam.rtsp_sub.empty()) {
-            reply_err(res, 1001, "字段不能为空");
-            return;
-        }
-        // 先占位落库（enabled=0 防 SYNCING 拾取半配置），代理编排成功再启用
-        const int64_t id = d_.db->insert_camera(cam);
-        if (id <= 0) {
-            reply_err(res, 5001, "db insert failed");
-            return;
-        }
-        std::string km, ks;
-        if (!d_.zlm->add_camera_proxies(static_cast<int>(id), cam.rtsp_main,
-                                        cam.rtsp_sub, &km, &ks)) {
-            d_.db->delete_camera_cascade(id);  // 回滚（防半配置）
-            reply_err(res, 4002, "ZLM 建代理失败（已回滚）");
-            return;
-        }
-        d_.db->set_camera_keys(id, km, ks);
-        // engine add_cam：失败不回滚（代理/记录保留，用户可重试或删除）
-        proto::AddCam ac;
-        ac.id = static_cast<uint32_t>(id);
-        ac.rtsp_sub = cam.rtsp_sub;
-        ac.rtsp_main = cam.rtsp_main;
-        ac.has_rtsp_main = true;
-        const proto::Ack ack = d_.uds->add_cam(ac);
-        if (ack.ret != 0) {
-            Json::Value data(Json::objectValue);
-            data["id"] = id;
-            data["note"] = "engine 添加失败（代理已建），可重试 enable 或删除";
-            res.set_content(dump(envelope(ack.ret,
-                                          ack.msg.empty() ? "engine add_cam 失败" : ack.msg,
-                                          &data)),
-                            "application/json");
-            return;
-        }
-        cam.id = id;
-        cam.enabled = true;
-        d_.db->update_camera(cam);
-        Json::Value data(Json::objectValue);
-        data["id"] = id;
-        Json::Value probe(Json::objectValue);
-        Json::Value not_probed(Json::objectValue);
-        not_probed["ok"] = false;
-        not_probed["note"] = "V1 不做 ISAPI 预探测（详设 §5.4-1 可选项）";
-        probe["main"] = not_probed;
-        probe["sub"] = not_probed;
-        data["probe"] = probe;
-        reply_data(res, data);
+        CameraRow camera;
+        camera.name = body["name"].asString();
+        camera.rtsp_main = body["rtsp_main"].asString();
+        camera.rtsp_sub = body["rtsp_sub"].asString();
+        camera.enabled = body.get("enabled", true).asInt() != 0;
+        reply_configuration(res, cameras_->create(camera), true);
     }));
 
     // ---- 2. GET /api/cameras ----
     svr_->Get("/api/cameras", auth_wrap([this](const httplib::Request&,
                                                httplib::Response& res) {
         Json::Value arr(Json::arrayValue);
-        for (const auto& c : d_.db->list_cameras(true)) {
+        for (const auto& c : d_.db->list_cameras(false)) {
             Json::Value o(Json::objectValue);
             o["id"] = c.id;
             o["name"] = c.name;
             o["rtsp_main"] = c.rtsp_main;
             o["rtsp_sub"] = c.rtsp_sub;
-            o["online"] = c.online;
+            o["online"] = c.enabled && c.online && d_.uds->online();
+            o["enabled"] = c.enabled;
+            CameraConfigState state;
+            if (d_.db->get_camera_config_state(c.id, state)) {
+                o["desired_revision"] = static_cast<Json::Int64>(state.desired_revision);
+                o["applied_revision"] = static_cast<Json::Int64>(state.applied_revision);
+                o["apply_status"] = state.apply_status;
+                o["last_error"] = state.last_error;
+                o["runtime_state"] = d_.uds->online() && state.apply_status == "succeeded" ? "confirmed" : "unknown";
+            }
             Json::Value algos(Json::arrayValue);
             for (const auto& a : d_.db->list_camera_algos(c.id)) {
                 Json::Value ao(Json::objectValue);
@@ -650,23 +596,61 @@ void HttpApi::register_routes() {
         reply_data(res, data);
     }));
 
-    // ---- 2b. POST /api/cameras/scan（组播 + HTTP 网段兜底并行，阻塞 ~3~5s）----
-    svr_->Post("/api/cameras/scan", auth_wrap([](const httplib::Request&,
-                                                 httplib::Response& res) {
-        const std::vector<DiscoveredDevice> devs = ws_discovery_probe(3000);
-        LOGI("http-api", "WS-Discovery scan: %zu devices", devs.size());
+    svr_->Get("/api/cameras/scan/interfaces", auth_wrap([](const httplib::Request&, httplib::Response& res) {
+        Json::Value data; data["interfaces"] = Json::Value(Json::arrayValue);
+        for (const auto& interface : enumerate_discovery_interfaces()) {
+            Json::Value row;
+            row["name"] = interface.name; row["address"] = interface.address;
+            row["netmask"] = interface.netmask; row["cidr"] = interface.cidr;
+            data["interfaces"].append(row);
+        }
+        reply_data(res, data);
+    }));
+    // A single bounded scan can run at a time; concurrent requests are rejected
+    // rather than accumulating 32-worker sweeps in the HTTP thread pool.
+    svr_->Post("/api/cameras/scan", auth_wrap([this](const httplib::Request& req,
+                                                  httplib::Response& res) {
+        Json::Value body(Json::objectValue);
+        if ((!req.body.empty() && (req.body.size() > 4096 || !parse_task_body(req.body, &body))) || !body.isObject()) {
+            reply_err(res, 1001, "expected scan options object"); return;
+        }
+        for (const auto& name : body.getMemberNames()) {
+            if (name != "interface" && name != "cidr" && name != "timeout_ms") {
+                reply_err(res, 1001, "unknown scan option"); return;
+            }
+        }
+        if ((body.isMember("interface") && (!body["interface"].isString() || body["interface"].asString().size() > 64)) ||
+            (body.isMember("cidr") && (!body["cidr"].isString() || body["cidr"].asString().size() > 32)) ||
+            (body.isMember("timeout_ms") && (!body["timeout_ms"].isInt() || body["timeout_ms"].asInt() < 500 || body["timeout_ms"].asInt() > 10000))) {
+            reply_err(res, 1001, "invalid scan options"); return;
+        }
+        DiscoveryOptions options;
+        options.interface_name = body.get("interface", "").asString();
+        options.cidr = body.get("cidr", "").asString();
+        options.timeout_ms = body.get("timeout_ms", 3000).asInt();
+        std::unique_lock<std::mutex> scan_lock(scan_mu_, std::try_to_lock);
+        if (!scan_lock.owns_lock()) { reply_err(res, 1003, "camera scan already running"); return; }
+        const auto result = discover_cameras(options);
         Json::Value arr(Json::arrayValue);
-        for (const auto& d : devs) {
+        for (const auto& d : result.devices) {
             Json::Value o(Json::objectValue);
             o["ip"] = d.ip;
             o["xaddr"] = d.xaddr;
             o["kind"] = d.kind;
             o["hik"] = d.hik;
+            o["source"] = d.source;
+            o["confirmed"] = d.confirmed;
             arr.append(o);
         }
         Json::Value data(Json::objectValue);
         data["devices"] = arr;
-        reply_data(res, data);
+        data["target_count"] = Json::UInt64(result.target_count);
+        data["attempted_count"] = Json::UInt64(result.attempted_count);
+        data["elapsed_ms"] = result.elapsed_ms;
+        data["timed_out"] = result.timed_out;
+        data["warnings"] = Json::Value(Json::arrayValue);
+        for (const auto& warning : result.warnings) data["warnings"].append(warning);
+        reply(res, result.code, result.message, &data);
     }));
 
     // ---- 2c. POST /api/cameras/onvif_uri（ONVIF GetStreamUri：账密 → 主/子码流）----
@@ -705,11 +689,11 @@ void HttpApi::register_routes() {
     auto put_dispatch = [this](const httplib::Request& req, httplib::Response& res) {
         const int64_t id = std::atoll(req.matches[1].str().c_str());
         Json::Value body;
-        if (!parse_body(req.body, &body)) {
+        if (!parse_body(req.body, &body) || !body.isObject()) {
             reply_err(res, 1001, "bad json");
             return;
         }
-        if (body.isMember("algos") && body["algos"].isArray()) {
+        if (body.isMember("algos") || req.path.find("/algos") != std::string::npos) {
             handle_put_algos(req, res, id, body);
         } else {
             handle_put_camera(req, res, id, body);
@@ -722,23 +706,24 @@ void HttpApi::register_routes() {
               auth_wrap([put_dispatch](const httplib::Request& req,
                                        httplib::Response& res) { put_dispatch(req, res); }));
 
-    // ---- 4. DELETE /api/cameras/{id} ----
-    svr_->Delete(R"(/api/cameras/(\d+))",
-                 auth_wrap([this](const httplib::Request& req, httplib::Response& res) {
-        const int64_t id = std::atoll(req.matches[1].str().c_str());
-        CameraRow cam;
-        if (!d_.db->get_camera(id, cam)) {
-            reply_err(res, 1002, "camera not found");
-            return;
-        }
-        proto::RemoveCam rc;
-        rc.id = static_cast<uint32_t>(id);
-        d_.uds->remove_cam(rc);  // best-effort
-        if (!cam.zlm_key_main.empty()) d_.zlm->del_proxy(cam.zlm_key_main);
-        if (!cam.zlm_key_sub.empty()) d_.zlm->del_proxy(cam.zlm_key_sub);
-        d_.db->logical_delete_camera(id);  // 详设 §5.4-4：逻辑删（保留关联）
-        Json::Value data(Json::objectValue);
-        data["ok"] = true;
+    svr_->Delete(R"(/api/cameras/(\d+))", auth_wrap([this](const httplib::Request& req, httplib::Response& res) {
+        reply_configuration(res, cameras_->remove(std::atoll(req.matches[1].str().c_str())));
+    }));
+    svr_->Get(R"(/api/operations/([A-Za-z0-9_-]+))", auth_wrap([this](const httplib::Request& req, httplib::Response& res) {
+        ConfigOperationRow operation;
+        if (!d_.db->get_config_operation(req.matches[1].str(), operation)) { reply_err(res, 1002, "operation not found"); return; }
+        Json::Value data;
+        data["operation_id"] = operation.operation_id;
+        data["camera_id"] = static_cast<Json::Int64>(operation.camera_id);
+        data["target_revision"] = static_cast<Json::Int64>(operation.target_revision);
+        data["type"] = operation.op_type;
+        data["status"] = operation.status;
+        data["attempts"] = operation.attempts;
+        data["error_code"] = operation.error_code;
+        data["last_error"] = operation.last_error;
+        data["next_retry_at"] = static_cast<Json::Int64>(operation.next_retry_at);
+        data["created_at"] = static_cast<Json::Int64>(operation.created_at);
+        data["updated_at"] = static_cast<Json::Int64>(operation.updated_at);
         reply_data(res, data);
     }));
 
@@ -758,9 +743,10 @@ void HttpApi::register_routes() {
         const int zlm_port = d_.zlm ? d_.zlm->port() : 80;
         Json::Value data(Json::objectValue);
         data["type"] = "webrtc";
-        data["signaling"] = "http://" + host_only(host_of(req)) +
-                            (zlm_port != 80 ? ":" + std::to_string(zlm_port) : "") +
-                            "/index/api/webrtc?app=live&stream=" + stream + "&type=play";
+        const std::string signaling = d_.public_base_url.empty()
+            ? "http://" + host_only(host_of(req)) + (zlm_port != 80 ? ":" + std::to_string(zlm_port) : "") + "/index/api/webrtc"
+            : d_.public_base_url + d_.public_media_signaling_path;
+        data["signaling"] = signaling + "?app=live&stream=" + stream + "&type=play";
         data["app"] = "live";
         data["stream"] = stream;
         reply_data(res, data);
@@ -843,7 +829,8 @@ void HttpApi::register_routes() {
             o["file_path"] = s.file_path;
             o["start_ts"] = s.start_ts;
             o["duration_s"] = s.duration_s;
-            o["url"] = "http://" + host + "/recordings/" + basename_of(s.file_path);
+            o["url"] = (d_.public_base_url.empty() ? "http://" + host : d_.public_base_url) +
+                       "/recordings/" + basename_of(s.file_path);
             items.append(o);
         }
         Json::Value data(Json::objectValue);
@@ -874,6 +861,8 @@ void HttpApi::register_routes() {
             o["id"] = e.id;
             o["camera_id"] = e.camera_id;
             o["algo_id"] = e.algo_id;
+            o["task_id"] = Json::Int64(e.task_id); o["rule_id"] = Json::Int64(e.rule_id);
+            o["task_revision"] = Json::Int64(e.task_revision); o["rule_version"] = Json::Int64(e.rule_version);
             o["type"] = e.type;
             o["ts"] = e.ts;
             if (!e.snapshot_path.empty()) o["snapshot"] = e.snapshot_path;
@@ -940,6 +929,23 @@ void HttpApi::register_routes() {
         Json::Value data(Json::objectValue);
         data["version"] = d_.version;
         data["ready"] = ready_.load(std::memory_order_relaxed);
+        data["lifecycle_state"] = stopping_ ? "STOPPING" : data["ready"].asBool() ? "RUNNING" : "STARTING";
+        const auto engine = d_.uds->state();
+        data["engine_state"] = engine == UdsClient::State::ONLINE ? "ONLINE" : engine == UdsClient::State::SYNCING ? "SYNCING" : "DISCONNECTED";
+        data["pending_operations"] = d_.db->pending_config_operations();
+        data["engine_write_ready"] = data["ready"].asBool() && !stopping_ && cameras_->write_ready();
+        data["sync_degraded_cams"] = d_.uds->sync_stats().degraded_cams;
+        if (d_.ws) {
+            const auto stats = d_.ws->stats();
+            auto& websocket = data["websocket"];
+            websocket["connections"] = static_cast<Json::UInt64>(d_.ws->conn_count());
+            websocket["buffered_bytes"] = static_cast<Json::UInt64>(stats.buffered_bytes);
+            websocket["buffered_frames"] = static_cast<Json::UInt64>(stats.buffered_frames);
+            websocket["dropped_meta"] = static_cast<Json::UInt64>(stats.dropped_meta);
+            websocket["slow_connections"] = static_cast<Json::UInt64>(stats.slow_connections);
+            websocket["rejected_connections"] = static_cast<Json::UInt64>(stats.rejected_connections);
+            websocket["invalid_input"] = static_cast<Json::UInt64>(stats.invalid_input);
+        }
         data["uptime_s"] = static_cast<int>((steady_ms() - start_steady_ms_) / 1000);
         const auto cams = d_.db->list_cameras(true);
         int online = 0;
@@ -948,6 +954,9 @@ void HttpApi::register_routes() {
         data["cameras_online"] = online;
         data["cameras_total"] = static_cast<int>(cams.size());
         data["ws_port"] = d_.ws_port;
+        data["same_origin_ws"] = !d_.public_base_url.empty();
+        data["public_base_url"] = d_.public_base_url;
+        data["public_ws_url"] = d_.public_ws_url;
         // 录像目录磁盘水位实测（Janitor 90% 兜底同口径；空目录 = 全盘）
         Json::Value disk(Json::objectValue);
         double up = -1, tg = 0, fg = 0;
@@ -970,6 +979,8 @@ void HttpApi::register_routes() {
     svr_->Post(R"(/api/algorithms/([^/]+)/rollback)",
                auth_wrap([this](const httplib::Request& req, httplib::Response& res) {
         const std::string algo = req.matches[1].str();
+        auto lease = d_.uds->begin_configuration();
+        if (!lease) { reply_err(res, 1003, "engine configuration is busy"); return; }
         proto::ReloadAlgo rl;
         rl.algo = algo;
         const proto::Ack ack = d_.uds->reload_algo(rl);

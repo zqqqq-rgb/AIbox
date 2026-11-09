@@ -16,6 +16,7 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <mutex>
 #include <string>
 #include <thread>
 #include <vector>
@@ -24,6 +25,7 @@
 
 #include "common/NonCopyable.h"
 #include "db.h"
+#include "resource_budget.h"
 
 namespace httplib {
 class Server;
@@ -36,37 +38,9 @@ namespace biz {
 
 class UdsClient;
 class ZlmClient;
-
-// ---- NPU 预检（纯函数，独立单测）----
-
-struct PrecheckModel {
-    std::string algo_id;  // 物理模型 = algo_id
-    double cost_ms = 0;   // 仅 rknn_run 口径
-    int64_t mem_kb = 0;   // ctx 内存
-};
-
-struct PrecheckUsage {
-    std::string algo_id;
-    int cam = 0;
-    int fps = 1;
-};
-
-struct PrecheckInput {
-    std::vector<PrecheckModel> models;   // 注册表全部（成本查表）
-    std::vector<PrecheckUsage> usages;   // 全系统勾选（含本次设置的目标通道）
-    int focus_cam = 0;                   // 本次设置的通道（建议文案指向它）
-    int npu_cores = 2;                   // steady 分配核数
-    int64_t npu_mem_total_kb = 2097152;  // NPU ctx 内存上限（默认 2GB，可配）
-};
-
-struct PrecheckResult {
-    double compute_pct = 0, mem_pct = 0;
-    bool ok = false;
-    int code = 0;     // 0 / 3001 / 3002
-    std::string msg;  // 超限时带建议："cam3 fps 5→3 可降至87%"
-};
-
-PrecheckResult npu_precheck(const PrecheckInput& in);
+class CameraService;
+class WsServer;
+class AccessSession;
 
 // ---- HttpApi ----
 
@@ -81,10 +55,19 @@ public:
         std::string static_dir;      // web/ SPA（空 = 不托管）
         std::string recordings_dir;  // MP4 目录（空 = 不挂 /recordings）
         std::string auth_token;      // 空 = 不鉴权
+        std::string public_base_url; // Explicit HTTPS origin for reverse-proxied access.
+        std::string public_ws_url;   // Optional same-host WSS origin.
+        std::string public_media_signaling_path = "/media/index/api/webrtc";
+        std::shared_ptr<AccessSession> access;
         int ws_port = 8081;          // /api/system/info 下发（WsHub 独立端口）
         int npu_cores = 2;
         int64_t npu_mem_total_kb = 2097152;
         std::string version = "0.1.0";
+        std::string media_host = "127.0.0.1";
+        int media_rtsp_port = 554;
+        int configuration_wait_ms = 1500;
+        int configuration_retry_ms = 500;
+        WsServer* ws = nullptr;
     };
 
     explicit HttpApi(Deps d);
@@ -92,6 +75,7 @@ public:
 
     bool start();  // bind_to_port + listen 线程；端口占用返回 false
     void stop();
+    void begin_shutdown();
 
     // §5.7-7：启动序列全部就绪后置位（/api/system/info 的 ready）
     void set_ready(bool r) { ready_.store(r, std::memory_order_relaxed); }
@@ -100,9 +84,6 @@ public:
 private:
     void register_routes();
     bool auth_ok(const httplib::Request& req) const;
-    // 预检输入收集：db 全量勾选（其他通道）+ 本次 body 覆盖 focus_cam
-    bool build_precheck_input(int cam, const std::vector<CamAlgoRow>& new_cfg,
-                              PrecheckInput* out, std::string* err);
 
     // PUT /api/cameras/{id} 与 /algos 两个 handler（板上 httplib 对路由做部分
     // 匹配且把 req.path 截断到匹配终点——分发依据=请求体结构，与路由引擎解耦；
@@ -113,11 +94,14 @@ private:
                           int64_t id, const Json::Value& body);
 
     Deps d_;
+    std::unique_ptr<CameraService> cameras_;
     std::unique_ptr<httplib::Server> svr_;
     std::thread th_;
     std::atomic<bool> ready_{false};
+    std::atomic<bool> stopping_{false};
     int64_t start_steady_ms_ = 0;
     int port_ = 0;
+    std::mutex scan_mu_;
 };
 
 }  // namespace biz

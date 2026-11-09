@@ -1,0 +1,29 @@
+Internal ctest changing into directory: /workspace/build-dev
+Test project /workspace/build-dev
+    Start 12: rule_runtime
+1/8 Test #12: rule_runtime .....................   Passed    0.01 sec
+    Start 13: engine_v2
+2/8 Test #13: engine_v2 ........................   Passed    4.66 sec
+    Start 14: task_runtime
+3/8 Test #14: task_runtime .....................   Passed    1.32 sec
+    Start 21: db
+4/8 Test #21: db ...............................   Passed    0.10 sec
+    Start 22: config_compiler
+5/8 Test #22: config_compiler ..................   Passed    0.00 sec
+    Start 23: tasks
+6/8 Test #23: tasks ............................   Passed    0.04 sec
+    Start 27: task_recovery
+7/8 Test #27: task_recovery ....................   Passed    3.38 sec
+    Start 30: http_api
+8/8 Test #30: http_api .........................   Passed    2.34 sec
+
+100% tests passed, 0 tests failed out of 8
+
+Label Time Summary:
+businessd_phase1    =   2.44 sec*proc (3 tests)
+businessd_phase2    =  11.85 sec*proc (8 tests)
+
+Total Test time (real) =  11.85 sec
+[check-headers] OK —— aibox_core 无硬件头文件
+PASS: V2 drafts, scheduled multi-camera activation, crash recovery and source events
+SKIP: board integration and real media/model verification

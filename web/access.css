@@ -1,0 +1,6 @@
+.access-gate{position:fixed;inset:0;z-index:2000;display:grid;place-items:center;padding:20px;background:var(--bg,#0c0f13)}
+.access-card{width:min(420px,100%);display:grid;gap:18px;padding:28px}
+.access-card label{display:grid;gap:8px}.access-card input{width:100%;min-height:42px}
+.access-card .warn-txt{min-height:1.5em}.scan-controls{display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin-bottom:12px}
+.scan-controls label{display:grid;gap:5px;flex:1;min-width:180px}.scan-summary{margin:10px 0}
+[hidden]{display:none!important}

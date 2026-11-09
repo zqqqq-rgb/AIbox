@@ -7,13 +7,14 @@
 ```
 web/
 ├── index.html              # T5.2 SPA 壳：侧边导航 + 顶栏 + 内嵌工控深色 CSS（零构建）
-├── app.js                  # T5.2 哈希路由 + 七页面（grid/cameras/algos/config/events/recordings/settings）
+├── app.js                  # 哈希路由 + 八页面（含 tasks）
+├── task_page.js / task_model.js # V2 任务 CRUD、启停、时间计划、区域编辑与表单转换
 ├── api.js                  # T5.2 REST 封装：envelope 解包、§8.2 错误码→toast、Bearer 预留、8s 超时
 ├── ws.js                   # T5.2 WS 管理：/ws/events 常驻 + /ws/meta/{cam} 引用计数租借 + 1s→8s 重连
 ├── player.js               # T5.2 CamPlayer：ZLMRTCClient 封装（signaling 完整 URL 直喂 zlmsdpUrl）
 ├── ui.js                   # T5.2 toast/confirmModal/badge/三态视图
 ├── overlay.js / overlay_core.js  # T5.1 检测框叠加（纯函数核心 + DOM 薄壳）
-├── tests/                  # Vitest：overlay_core 22 用例 + 模块导入回归 2 用例
+├── tests/                  # Vitest：区域叠加、任务表单、REST 受理语义、模块导入
 ├── package.json / .gitignore     # 仅 dev 测试（vitest），node_modules 不入库
 └── vendor/ZLMRTCClient.js  # WebRTC 播放内核（306KB，取自 ZLMediaKit www/）
 ```
@@ -23,7 +24,7 @@ web/
 ```bash
 cd web
 npm install        # 仅 dev 依赖 vitest
-npm test           # 预期：24/24 全绿（overlay_core 22 + 模块导入 2）
+npm test           # 当前 33/33：overlay_core 21 + api 6 + task_model 4 + 模块导入 2
 ```
 
 ## 部署拷贝纪律（板上）
@@ -40,7 +41,9 @@ rsync -a --exclude node_modules --exclude package*.json --exclude tests \
 
 ## 手工验收清单（T5.2 DoD，板上 businessd 托管后浏览器过一遍）
 
-- [ ] 七路由切换正常，刷新保持当前页（#/grid 默认）
+- [ ] 八路由切换正常，刷新保持当前页（#/grid 默认）
+- [ ] 算法任务：新建草稿、多摄像头/算法/规则、区域绘制、时间窗口、启停、部署状态和执行详情
+- [ ] 定时任务：窗口外等待、窗口内运行；停用确认后编辑；列表轮询不覆盖表单或预检结果
 - [ ] 宫格 1/4/9 切换；子码流出画面（WebRTC）；在线徽标/时钟正常
 - [ ] 检测框压在人身上（frame_w/frame_h → fitRect 对齐）；换网络无需校准
 - [ ] 单击放大 → 宫格实例销毁只剩 1 路（单路有声）；返回 → 重建

@@ -1,0 +1,8 @@
+.git
+build
+build-*
+web/node_modules
+.codex
+.aws
+doc
+*.log

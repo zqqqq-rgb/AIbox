@@ -1,0 +1,16 @@
+
+> test
+> vitest run
+
+
+ RUN  v2.1.9 E:/aibox/aibox-main/web
+
+ ✓ tests/overlay_core.test.js (21 tests) 5ms
+ ✓ tests/api.test.js (4 tests) 6ms
+ ✓ tests/modules.test.js (2 tests) 157ms
+
+ Test Files  3 passed (3)
+      Tests  27 passed (27)
+   Start at  15:20:53
+   Duration  1.18s (transform 136ms, setup 0ms, collect 180ms, tests 168ms, environment 1ms, prepare 1.71s)
+

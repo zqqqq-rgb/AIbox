@@ -36,6 +36,7 @@
 
 #include "common/NonCopyable.h"
 #include "db.h"
+#include "config_compiler.h"
 #include "ipc/Protocol.h"
 
 namespace aibox {
@@ -52,6 +53,8 @@ public:
         // line = 原始 JSON 行（detections 原样转发 WS 需要全字段透传，
         // 经 ParsedMsg 往返会丢未知字段）
         std::function<void(const proto::ParsedMsg& pm, const std::string& line)> on_evt;
+        // Runs under the replay/configuration lease, before this camera's IPC.
+        std::function<bool(const CameraConfigSnapshot&)> prepare_camera;
     };
 
     struct SyncStats {  // 测试/诊断观测（last_sync 快照）
@@ -67,6 +70,9 @@ public:
         int ack_retries = 2;          // SYNCING 失败重试次数（×2 后 degraded）
         int ping_interval_ms = 5000;  // ONLINE 心跳（get_metrics 口径）
         int ping_fail_limit = 3;      // 连续超时 → DISCONNECTED
+        std::string media_host = "127.0.0.1";
+        int media_rtsp_port = 554;
+        std::function<int64_t()> schedule_now = {};
     };
 
     // 默认参数用重载代替（嵌套类聚合的默认实参 = {} 在外层类完成前求值，GCC 拒绝；
@@ -81,6 +87,21 @@ public:
     State state() const { return state_.load(std::memory_order_relaxed); }
     bool online() const { return state() == State::ONLINE; }
     SyncStats sync_stats() const;
+    uint64_t connection_epoch() const { return epoch_.load(); }
+    class ConfigurationLease {
+    public:
+        bool valid() const { return owner_.online() && owner_.connection_epoch() == epoch_; }
+        uint64_t epoch() const { return epoch_; }
+    private:
+        friend class UdsClient;
+        ConfigurationLease(UdsClient& owner, std::unique_lock<std::mutex>&& lock)
+            : owner_(owner), lock_(std::move(lock)), epoch_(owner.connection_epoch()) {}
+        UdsClient& owner_;
+        std::unique_lock<std::mutex> lock_;
+        uint64_t epoch_;
+    };
+    // Nonblocking admission: the receiver must remain free to dispatch ACKs.
+    std::unique_ptr<ConfigurationLease> begin_configuration();
 
     // ---- 运行期命令（HttpApi/WsHub 调用；阻塞等 ack）----
     // 返回 engine ack；连接不可用/SYNCING 中/超时 → ret=-1、msg 描述原因
@@ -90,6 +111,7 @@ public:
     proto::Ack remove_cam(const proto::RemoveCam& v);
     proto::Ack reload_algo(const proto::ReloadAlgo& v);
     bool get_metrics(std::string* data_out, int timeout_ms = 3000);  // data=ack.data
+    bool get_capabilities(std::string* data_out, int timeout_ms = 1000);
 
     // WsHub 引用计数联动（fire-and-forget：不等待 ack，不阻塞转发路径）。
     // 记入 active_subs_，重连后自动重发——engine 重启不丢订阅。
@@ -99,7 +121,8 @@ private:
     void loop();              // 唯一 client 线程主循环
     bool connect_once();
     void close_sock();
-    bool send_line(const std::string& line);   // send_mu_ 串行；MSG_NOSIGNAL 防崩
+    bool send_line(const std::string& line, uint64_t expected_epoch = 0);
+    void disconnect(const char* reason);
     bool pump(int timeout_ms);                 // poll+recv → 切行 → handle_line
     void handle_line(const std::string& line);
     bool do_sync();           // SYNCING 全量编排（client 线程内）
@@ -125,6 +148,8 @@ private:
     std::string rbuf_;                 // client 线程独占
 
     std::mutex send_mu_;
+    std::mutex configuration_mu_;
+    std::atomic<uint64_t> epoch_{1};
     std::mutex cmd_mu_;                // 命令因果序（全局串行）
 
     std::mutex ack_mu_;

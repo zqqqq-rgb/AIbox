@@ -1,0 +1,13 @@
+{
+  "cmake.buildDirectory": "${workspaceFolder}/build-dev",
+  "cmake.generator": "Ninja",
+  "cmake.configureSettings": {
+    "AIBOX_BUILD_TESTS": "ON",
+    "CMAKE_BUILD_TYPE": "Debug",
+    "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+  },
+  "C_Cpp.default.compileCommands": "${workspaceFolder}/build-dev/compile_commands.json",
+  "C_Cpp.default.compilerPath": "/usr/bin/g++",
+  "C_Cpp.default.cppStandard": "c++17",
+  "python.defaultInterpreterPath": "/usr/bin/python3"
+}

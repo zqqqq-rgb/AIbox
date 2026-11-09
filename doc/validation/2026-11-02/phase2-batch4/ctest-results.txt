@@ -1,0 +1,78 @@
+Internal ctest changing into directory: /workspace/build-dev
+Test project /workspace/build-dev
+      Start  1: fakes
+ 1/34 Test  #1: fakes ............................   Passed    0.08 sec
+      Start  2: edge_meter
+ 2/34 Test  #2: edge_meter .......................   Passed    0.02 sec
+      Start  3: bounded_queue
+ 3/34 Test  #3: bounded_queue ....................   Passed    0.12 sec
+      Start  4: frame_pool
+ 4/34 Test  #4: frame_pool .......................   Passed    0.01 sec
+      Start  5: letterbox_math
+ 5/34 Test  #5: letterbox_math ...................   Passed    0.00 sec
+      Start  6: sampler
+ 6/34 Test  #6: sampler ..........................   Passed    0.00 sec
+      Start  7: uds_protocol
+ 7/34 Test  #7: uds_protocol .....................   Passed    0.00 sec
+      Start  8: npu_scheduler
+ 8/34 Test  #8: npu_scheduler ....................   Passed    2.04 sec
+      Start  9: npu_core_plan
+ 9/34 Test  #9: npu_core_plan ....................   Passed    0.00 sec
+      Start 10: camera_channel
+10/34 Test #10: camera_channel ...................   Passed    2.53 sec
+      Start 11: rule_engine
+11/34 Test #11: rule_engine ......................   Passed    0.00 sec
+      Start 12: rule_runtime
+12/34 Test #12: rule_runtime .....................   Passed    0.01 sec
+      Start 13: engine_v2
+13/34 Test #13: engine_v2 ........................   Passed    4.67 sec
+      Start 14: task_runtime
+14/34 Test #14: task_runtime .....................   Passed    1.32 sec
+      Start 15: degrade
+15/34 Test #15: degrade ..........................   Passed    0.60 sec
+      Start 16: tracker
+16/34 Test #16: tracker ..........................   Passed    0.00 sec
+      Start 17: uds_server
+17/34 Test #17: uds_server .......................   Passed    6.13 sec
+      Start 18: yolov8_post
+18/34 Test #18: yolov8_post ......................   Passed    0.00 sec
+      Start 19: algo_package
+19/34 Test #19: algo_package .....................   Passed    0.01 sec
+      Start 20: model_registry
+20/34 Test #20: model_registry ...................   Passed    0.01 sec
+      Start 21: db
+21/34 Test #21: db ...............................   Passed    0.10 sec
+      Start 22: config_compiler
+22/34 Test #22: config_compiler ..................   Passed    0.00 sec
+      Start 23: tasks
+23/34 Test #23: tasks ............................   Passed    0.04 sec
+      Start 24: camera_service
+24/34 Test #24: camera_service ...................   Passed   11.62 sec
+      Start 25: business_startup
+25/34 Test #25: business_startup .................   Passed    6.00 sec
+      Start 26: business_recovery
+26/34 Test #26: business_recovery ................   Passed    4.43 sec
+      Start 27: task_recovery
+27/34 Test #27: task_recovery ....................   Passed    3.41 sec
+      Start 28: uds_client
+28/34 Test #28: uds_client .......................   Passed    2.48 sec
+      Start 29: zlm_client
+29/34 Test #29: zlm_client .......................   Passed    0.33 sec
+      Start 30: http_api
+30/34 Test #30: http_api .........................   Passed    2.29 sec
+      Start 31: ws_hub
+31/34 Test #31: ws_hub ...........................   Passed    0.21 sec
+      Start 32: ws_limits
+32/34 Test #32: ws_limits ........................   Passed    0.31 sec
+      Start 33: janitor
+33/34 Test #33: janitor ..........................   Passed    0.01 sec
+      Start 34: onvif
+34/34 Test #34: onvif ............................   Passed    0.00 sec
+
+100% tests passed, 0 tests failed out of 34
+
+Label Time Summary:
+businessd_phase1    =  27.78 sec*proc (10 tests)
+businessd_phase2    =  11.85 sec*proc (8 tests)
+
+Total Test time (real) =  48.82 sec

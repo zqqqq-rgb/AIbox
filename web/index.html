@@ -4,6 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>AIBox 管理台</title>
+  <link rel="stylesheet" href="./access.css">
   <style>
     /* ===== 工控深色主题 v2（HMI/SCADA 质感：深空炭底/分层面板/青色辉光/网格纹理/状态灯）===== */
     :root {
@@ -232,6 +233,22 @@
     }
     .roi-hint { font-size: var(--fs-s); color: var(--dim); margin: 8px 0 10px; }
 
+    .task-layout { display: grid; grid-template-columns: minmax(220px, 30%) minmax(0, 1fr); gap: 16px; margin-top: 16px; }
+    .task-card { display: flex; flex-direction: column; gap: 6px; width: 100%; margin-bottom: 8px; padding: 12px; text-align: left; color: var(--txt); background: var(--panel); border: 1px solid var(--line2); cursor: pointer; }
+    .task-card.selected { border-color: var(--acc); }
+    .task-field { display: flex; flex-direction: column; gap: 5px; margin: 10px 0; }
+    .task-field[hidden] { display: none; }
+    .task-field input:not([type=checkbox]), .task-field select { width: 100%; min-width: 0; }
+    .task-layout .row { flex-wrap: wrap; }
+    .task-layout .panel, .task-section { min-width: 0; }
+    .task-actions { position: sticky; top: 0; z-index: 2; background: var(--panel); padding: 8px 0; }
+    .task-choices { display: flex; flex-wrap: wrap; gap: 12px; }
+    .task-section { border: 1px solid var(--line2); background: var(--panel2); padding: 12px; margin: 10px 0; }
+    .task-region { width: 100%; max-width: 480px; background: #0c1520; border: 1px solid var(--line2); cursor: crosshair; }
+    .task-operation { border-top: 1px solid var(--line2); padding: 8px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+    .task-layout fieldset { border: 0; padding: 0; min-width: 0; }
+    .task-layout fieldset:disabled { opacity: .6; }
+    @media(max-width: 1000px) { .task-layout { grid-template-columns: 1fr; } }
     /* ---------- modal / toast ---------- */
     .mask {
       position: fixed; inset: 0; background: rgba(4,6,9,.66); z-index: 50;
@@ -357,6 +374,7 @@
       <a href="#/cameras">摄像头</a>
       <a href="#/algos">算法库</a>
       <a href="#/config">算法配置</a>
+      <a href="#/tasks">算法任务</a>
       <a href="#/events">事件</a>
       <a href="#/recordings">回放</a>
       <a href="#/settings">设置</a>
@@ -369,6 +387,7 @@
         <span>摄像头 <b id="tb-cams" class="mono">--</b></span>
         <span>降级 <b id="tb-degrade">无</b></span>
         <span>uptime <b id="tb-uptime" class="mono">--</b></span>
+        <button class="btn" id="access-logout" hidden>退出登录</button>
       </header>
       <div id="ws-banner">连接中断，重连中…（恢复后自动消失，检测框将自动重新对齐）</div>
       <div id="view"></div>

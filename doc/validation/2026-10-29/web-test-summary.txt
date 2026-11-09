@@ -1,0 +1,14 @@
+Date: 2026-10-29 (Asia/Shanghai)
+Command: npm test
+Directory: E:/aibox/aibox-main/web
+Runner: Vitest 2.1.9
+
+tests/api.test.js: 3 passed
+tests/overlay_core.test.js: 21 passed
+tests/modules.test.js: 2 passed
+
+Test Files: 3 passed
+Tests: 26 passed
+Exit code: 0
+
+This file is a summary of the observed test output.

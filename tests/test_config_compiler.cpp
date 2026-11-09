@@ -39,6 +39,20 @@ void run() {
     bad = on;
     bad.detect_fps = 256;
     CHECK(!compile_algos(3, {bad}, out, err));
+    CameraRow cam;
+    cam.id = 3; cam.name = "camera";
+    cam.rtsp_main = "rtsp://source/main"; cam.rtsp_sub = "rtsp://source/sub";
+    const auto json = encode_camera_config(cam, {on, off});
+    CameraConfigSnapshot snapshot;
+    CHECK(decode_camera_config(json, snapshot));
+    CompiledCameraConfig compiled;
+    CHECK(compile_camera_config(snapshot, "127.0.0.1", 8554, compiled, err));
+    CHECK(compiled.add.rtsp_sub == "rtsp://127.0.0.1:8554/live/cam3_sub");
+    CHECK(snapshot.camera.rtsp_sub == cam.rtsp_sub && snapshot.algos.size() == 2);
+    CHECK(!decode_camera_config("{}", snapshot));
+    snapshot.deleted = true;
+    CHECK(compile_camera_config(snapshot, "127.0.0.1", 8554, compiled, err));
+    CHECK(compiled.algos.algos.empty());
 }
 }
 TEST_MAIN("config_compiler")

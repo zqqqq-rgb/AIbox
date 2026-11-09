@@ -59,7 +59,7 @@ struct Rig {
     std::unique_ptr<HttpApi> api;
     int port = 0;
 
-    Rig() {
+    explicit Rig(int wait_ms = 1500) {
         CHECK(db.migrate() == Db::kSchemaLatest);
         // 算法注册表：person 100ms/100MB，face 200ms/200MB（预检算例）
         proto::RegistryReadyEvt evt;
@@ -94,6 +94,7 @@ struct Rig {
         d.http_port = port;
         d.bind_host = "127.0.0.1";
         d.ws_port = 8081;
+        d.configuration_wait_ms = wait_ms;
         api = std::make_unique<HttpApi>(d);
         CHECK(api->start());
         // 等 UDS ONLINE（POST /api/cameras 依赖 engine ack）
@@ -144,9 +145,28 @@ void test_system_info() {
     CHECK(root["data"].isMember("version"));
     CHECK(root["data"]["ws_port"].asInt() == 8081);
     CHECK(root["data"]["ready"].asBool() == false);
+    CHECK(root["data"]["lifecycle_state"].asString() == "STARTING");
     r.api->set_ready(true);
     res = cli.Get("/api/system/info");
     CHECK(parse_json(res->body)["data"]["ready"].asBool() == true);
+    CHECK(parse_json(res->body)["data"]["lifecycle_state"].asString() == "RUNNING");
+    {
+        auto lease = r.uds->begin_configuration();
+        CHECK(static_cast<bool>(lease));
+        res = cli.Get("/api/system/info");
+        CHECK(!parse_json(res->body)["data"]["engine_write_ready"].asBool());
+    }
+    r.api->begin_shutdown();
+    res = cli.Get("/api/system/info");
+    const auto stopping = parse_json(res->body)["data"];
+    CHECK(stopping["lifecycle_state"].asString() == "STOPPING");
+    CHECK(!stopping["ready"].asBool() && !stopping["engine_write_ready"].asBool());
+    const auto count = r.db.list_cameras(false).size();
+    res = cli.Post("/api/cameras", R"({"name":"late","rtsp_main":"rtsp://m","rtsp_sub":"rtsp://s"})", "application/json");
+    CHECK(parse_json(res->body)["code"].asInt() == 1003);
+    CHECK(!parse_json(res->body)["data"]["accepted"].asBool());
+    CHECK(r.db.list_cameras(false).size() == count);
+    r.api->begin_shutdown();
 }
 
 // ---- 7. algorithms ----
@@ -389,7 +409,8 @@ void test_camera_rebuild_restores_algorithms() {
     proto::AddCam camera;
     proto::SetAlgos applied;
     CHECK(r.eng.camera(static_cast<uint32_t>(id), camera, applied));
-    CHECK(camera.rtsp_sub == "rtsp://new-source/sub");
+    CHECK(camera.rtsp_sub == "rtsp://127.0.0.1:554/live/cam" + std::to_string(id) + "_sub");
+    CHECK(r.zlm.source("cam" + std::to_string(id) + "_sub") == "rtsp://new-source/sub");
     CHECK(applied.algos.size() == 1);
     if (!applied.algos.empty()) {
         CHECK(applied.algos[0].has_roi && applied.algos[0].roi.size() == 3);
@@ -399,6 +420,145 @@ void test_camera_rebuild_restores_algorithms() {
     res = cli.Put(path.c_str(), R"({"name":"renamed"})", "application/json");
     CHECK(res && parse_json(res->body)["code"].asInt() == 0);
     CHECK(r.eng.add_cam.load() == before);
+}
+
+void test_pending_operation_query_and_recovery() {
+    Rig r(0);
+    r.eng.fail_algorithms(1, true);
+    MAKE_CLI(cli);
+    auto response = cli.Post("/api/cameras",
+        R"({"name":"pending","rtsp_main":"rtsp://user:TEST_PASSWORD@m/main","rtsp_sub":"rtsp://user:TEST_PASSWORD@m/sub"})", "application/json");
+    CHECK(response);
+    if (!response) return;
+    auto root = parse_json(response->body);
+    CHECK(root["code"].asInt() == 1003 && root["data"]["accepted"].asBool());
+    CHECK(root["data"]["pending"].asBool());
+    const auto id = root["data"]["id"].asInt64();
+    const auto operation = root["data"]["operation_id"].asString();
+    CHECK(id > 0 && !operation.empty());
+    auto query = cli.Get(("/api/operations/" + operation).c_str());
+    CHECK(query && parse_json(query->body)["code"].asInt() == 0);
+    if (query) {
+        CHECK(query->body.find("TEST_PASSWORD") == std::string::npos);
+        CHECK(!parse_json(query->body)["data"].isMember("target_config_json"));
+        CHECK(!parse_json(query->body)["data"].isMember("previous_applied_json"));
+    }
+    CameraConfigState state; CHECK(r.db.get_camera_config_state(id, state));
+    CHECK(state.desired_revision == 1 && state.applied_revision == 0);
+    r.eng.fail_algorithms(1, false);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    bool applied = false;
+    while (std::chrono::steady_clock::now() < deadline) {
+        query = cli.Get(("/api/operations/" + operation).c_str());
+        if (query && parse_json(query->body)["data"]["status"] == "succeeded") { applied = true; break; }
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    CHECK(applied);
+    CHECK(r.db.get_camera_config_state(id, state) && state.applied_revision == 1);
+    r.uds->stop();
+    const auto cameras = r.db.list_cameras(false).size();
+    response = cli.Post("/api/cameras", R"({"name":"busy","rtsp_main":"rtsp://m","rtsp_sub":"rtsp://s"})", "application/json");
+    CHECK(response && parse_json(response->body)["code"].asInt() == 1003);
+    CHECK(response && !parse_json(response->body)["data"]["accepted"].asBool());
+    CHECK(r.db.list_cameras(false).size() == cameras);
+}
+
+void test_degraded_health_is_distinct_from_last_sync_statistics() {
+    Rig r(0);
+    r.api->set_ready(true);
+    const auto id = r.add_camera("health recovery");
+    r.uds->stop();
+    r.eng.fail_algorithms(id, true);
+    r.uds->start();
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    while (!r.uds->online() && std::chrono::steady_clock::now() < deadline)
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    CHECK(r.uds->online());
+    MAKE_CLI(cli);
+    auto response = cli.Get("/api/system/info");
+    CHECK(response);
+    if (!response) return;
+    auto data = parse_json(response->body)["data"];
+    CHECK(data["ready"].asBool() && data["lifecycle_state"] == "RUNNING");
+    CHECK(data["engine_state"] == "ONLINE" && data["sync_degraded_cams"] == 1);
+    CHECK(data["pending_operations"].asInt() == 1);
+    response = cli.Get("/api/cameras"); CHECK(response);
+    if (!response) return;
+    CHECK(parse_json(response->body)["data"][0]["runtime_state"] == "unknown");
+    r.eng.fail_algorithms(id, false);
+    CameraConfigState state;
+    const auto repaired_deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+    while (std::chrono::steady_clock::now() < repaired_deadline) {
+        if (r.db.get_camera_config_state(id, state) && state.apply_status == "succeeded") break;
+        std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+    CHECK(state.apply_status == "succeeded");
+    response = cli.Get("/api/system/info"); CHECK(response);
+    if (!response) return;
+    data = parse_json(response->body)["data"];
+    CHECK(data["pending_operations"] == 0);
+    CHECK(data["sync_degraded_cams"] == 1); // A historical statistic, not current unhealthy cameras.
+    response = cli.Get("/api/cameras"); CHECK(response);
+    if (!response) return;
+    CHECK(parse_json(response->body)["data"][0]["runtime_state"] == "confirmed");
+    r.uds->stop();
+    response = cli.Get("/api/cameras"); CHECK(response);
+    if (!response) return;
+    const auto row = parse_json(response->body)["data"][0];
+    CHECK(!row["online"].asBool() && row["runtime_state"] == "unknown");
+    response = cli.Get("/api/system/info"); CHECK(response);
+    if (response) {
+        data = parse_json(response->body)["data"];
+        CHECK(data["ready"].asBool() && !data["engine_write_ready"].asBool());
+    }
+}
+void test_task_drafts_offline_and_legacy_adapter() {
+    Rig r;
+    const auto id=r.add_camera("tasks camera");
+    MAKE_CLI(cli);
+    auto applied=cli.Put(("/api/cameras/"+std::to_string(id)+"/algos").c_str(),
+        R"({"algos":[{"algo_id":"person","fps":2,"threshold":0.8}]})","application/json");
+    CHECK(applied&&parse_json(applied->body)["code"]==0);
+    r.uds->stop(); // Draft management remains useful while the engine is unavailable.
+    auto response=cli.Get("/api/tasks"); CHECK(response); if(!response) return;
+    const auto legacy=parse_json(response->body)["data"][0]["id"].asInt64();
+    const auto commands=r.eng.commands();
+    const std::string body="{\"name\":\"entry task\",\"camera_ids\":["+std::to_string(id)+
+        R"(],"enabled":false,"algorithms":[{"algo_id":"person","fps":4,"threshold":0.6}],"rules":[{"key":"entry","algo_id":"person","capability_id":"region_in","roi":[[0,0],[1,0],[1,1]]}]})";
+    response=cli.Post("/api/tasks",body,"application/json"); CHECK(response); if(!response) return;
+    auto root=parse_json(response->body); CHECK(root["code"].asInt()==0);
+    CHECK(root["data"]["saved"].asBool()&&!root["data"]["applied"].asBool()&&root["data"]["status"]=="draft");
+    const auto task=root["data"]["id"].asInt64(); CHECK(task>0&&task!=legacy);
+    response=cli.Get(("/api/tasks/"+std::to_string(task)).c_str()); CHECK(response);
+    if(response) CHECK(parse_json(response->body)["data"]["rules"][0]["id"].asInt64()>0);
+    response=cli.Post("/api/tasks/preview","{\"camera_id\":"+std::to_string(id)+",\"include_drafts\":true}","application/json");
+    CHECK(response); if(response) {
+        root=parse_json(response->body); CHECK(root["code"]==0);
+        CHECK(root["data"]["models"].size()==1&&!root["data"]["apply_supported"].asBool());
+    }
+    response=cli.Get("/api/capabilities"); CHECK(response);
+    if(response) CHECK(parse_json(response->body)["data"].size()>=10);
+    auto enabled=parse_json(body); enabled["enabled"]=true;
+    Json::StreamWriterBuilder writer; writer["indentation"]="";
+    response=cli.Post("/api/tasks",Json::writeString(writer,enabled),"application/json");
+    CHECK(response&&parse_json(response->body)["code"]==1003);
+    response=cli.Post("/api/tasks",body+" {}","application/json");
+    CHECK(response&&parse_json(response->body)["code"]==1001);
+    response=cli.Post("/api/tasks",R"({"name":"a","name":"b"})","application/json");
+    CHECK(response&&parse_json(response->body)["code"]==1001);
+    response=cli.Put("/api/tasks/0",body,"application/json"); CHECK(response&&parse_json(response->body)["code"]==1002);
+    response=cli.Put("/api/tasks/999999999999999999999999999999",body,"application/json");
+    CHECK(response&&parse_json(response->body)["code"]==1002);
+    response=cli.Put(("/api/tasks/"+std::to_string(legacy)).c_str(),body,"application/json");
+    CHECK(response&&parse_json(response->body)["code"]==1003);
+    response=cli.Delete(("/api/tasks/"+std::to_string(task)).c_str(),"{\"revision\":1}","application/json");
+    CHECK(response&&parse_json(response->body)["code"]==0);
+    response=cli.Get("/api/tasks"); CHECK(response&&parse_json(response->body)["data"].size()==1);
+    CHECK(r.eng.commands()==commands);
+    const auto legacy_algorithms=r.db.list_camera_algos(id);
+    CHECK(legacy_algorithms.size()==1&&legacy_algorithms[0].detect_fps==2);
+    proto::AddCam runtime; proto::SetAlgos algos;
+    CHECK(r.eng.camera(id,runtime,algos)&&algos.algos.size()==1&&algos.algos[0].fps==2);
 }
 
 void run() {
@@ -415,6 +575,9 @@ void run() {
     test_stream();
     test_algorithm_validation_and_disable();
     test_camera_rebuild_restores_algorithms();
+    test_pending_operation_query_and_recovery();
+    test_degraded_health_is_distinct_from_last_sync_statistics();
+    test_task_drafts_offline_and_legacy_adapter();
 }
 
 }  // namespace

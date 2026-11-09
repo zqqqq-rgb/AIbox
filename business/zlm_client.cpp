@@ -8,6 +8,8 @@
 #include <unistd.h>
 
 #include <cctype>
+#include <chrono>
+#include <algorithm>
 #include <cerrno>
 #include <cstdio>
 #include <cstring>
@@ -18,6 +20,13 @@ namespace aibox {
 namespace biz {
 
 namespace {
+
+using Deadline = std::chrono::steady_clock::time_point;
+int remaining_ms(Deadline deadline) {
+    const auto left = std::chrono::duration_cast<std::chrono::milliseconds>(
+        deadline - std::chrono::steady_clock::now()).count();
+    return static_cast<int>(std::max<int64_t>(0, left));
+}
 
 std::string url_encode(const std::string& s) {
     static const char* hex = "0123456789ABCDEF";
@@ -46,7 +55,7 @@ std::string encode_form(const std::vector<std::pair<std::string, std::string>>& 
 }
 
 // 带超时的 TCP 连接（host 支持点分 IPv4 与域名；ZLM 部署在 127.0.0.1）
-int connect_tcp(const std::string& host, int port, int timeout_ms) {
+int connect_tcp(const std::string& host, int port, Deadline deadline) {
     char port_buf[16];
     std::snprintf(port_buf, sizeof(port_buf), "%d", port);
     addrinfo hints{};
@@ -72,7 +81,7 @@ int connect_tcp(const std::string& host, int port, int timeout_ms) {
         pollfd pf{};
         pf.fd = fd;
         pf.events = POLLOUT;
-        if (::poll(&pf, 1, timeout_ms) != 1) {
+        if (::poll(&pf, 1, remaining_ms(deadline)) != 1) {
             ::close(fd);
             return -1;
         }
@@ -87,13 +96,16 @@ int connect_tcp(const std::string& host, int port, int timeout_ms) {
     return fd;
 }
 
-bool send_all(int fd, const std::string& buf, int timeout_ms) {
+bool send_all(int fd, const std::string& buf, Deadline deadline) {
     size_t off = 0;
     while (off < buf.size()) {
+        if (!remaining_ms(deadline)) return false;
         pollfd pf{};
         pf.fd = fd;
         pf.events = POLLOUT;
-        if (::poll(&pf, 1, timeout_ms) != 1) return false;
+        const auto result = ::poll(&pf, 1, remaining_ms(deadline));
+        if (result < 0 && errno == EINTR) continue;
+        if (result != 1) return false;
         const ssize_t n = ::send(fd, buf.data() + off, buf.size() - off, MSG_NOSIGNAL);
         if (n > 0) {
             off += static_cast<size_t>(n);
@@ -107,13 +119,14 @@ bool send_all(int fd, const std::string& buf, int timeout_ms) {
 }
 
 // Connection: close：读到 EOF 即收全；poll 超时兜底
-bool recv_all(int fd, std::string* out, int timeout_ms) {
+bool recv_all(int fd, std::string* out, Deadline deadline) {
     char buf[4096];
     for (;;) {
+        if (!remaining_ms(deadline)) return false;
         pollfd pf{};
         pf.fd = fd;
         pf.events = POLLIN;
-        const int pr = ::poll(&pf, 1, timeout_ms);
+        const int pr = ::poll(&pf, 1, remaining_ms(deadline));
         if (pr == 0) return false;  // 应答超时
         if (pr < 0) {
             if (errno == EINTR) continue;
@@ -121,6 +134,8 @@ bool recv_all(int fd, std::string* out, int timeout_ms) {
         }
         const ssize_t n = ::recv(fd, buf, sizeof(buf), 0);
         if (n > 0) {
+            constexpr size_t max_response = 16 * 1024 * 1024;
+            if (out->size() > max_response - static_cast<size_t>(n)) return false;
             out->append(buf, static_cast<size_t>(n));
             continue;
         }
@@ -175,7 +190,8 @@ bool ZlmClient::http(const char* method, const std::string& path,
                      const std::string& encoded_form, std::string* body_out,
                      int timeout_ms) {
     const int tmo = timeout_ms > 0 ? timeout_ms : p_.timeout_ms;
-    const int fd = connect_tcp(p_.host, p_.port, tmo);
+    const auto deadline = std::chrono::steady_clock::now() + std::chrono::milliseconds(tmo);
+    const int fd = connect_tcp(p_.host, p_.port, deadline);
     if (fd < 0) return false;
 
     std::string req = std::string(method) + " " + path + " HTTP/1.1\r\n";
@@ -189,7 +205,7 @@ bool ZlmClient::http(const char* method, const std::string& path,
     req += encoded_form;
 
     std::string raw;
-    const bool ok = send_all(fd, req, tmo) && recv_all(fd, &raw, tmo);
+    const bool ok = send_all(fd, req, deadline) && recv_all(fd, &raw, deadline);
     ::close(fd);
     if (!ok) return false;
 
@@ -227,8 +243,12 @@ bool ZlmClient::call_api(const char* method, const std::string& path,
         LOGW("zlm", "%s %s 应答非 JSON: %.80s", method, path.c_str(), body.c_str());
         return false;
     }
-    *code = root.get("code", kErrTransport).asInt();
-    if (root.isMember("msg")) *msg = root["msg"].asString();
+    if (!root.isObject() || !root["code"].isInt()) {
+        *msg = "zlm invalid response envelope";
+        return false;
+    }
+    *code = root["code"].asInt();
+    if (root["msg"].isString()) *msg = root["msg"].asString();
     if (root.isMember("data")) *data = root["data"];
     if (*code != kOk) {
         LOGW("zlm", "%s %s code=%d msg=%s", method, path.c_str(), *code, msg->c_str());

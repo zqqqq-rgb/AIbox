@@ -1,0 +1,38 @@
+{
+  "task": {
+    "id": 6,
+    "name": "定时区域入侵演示",
+    "revision": 6,
+    "status": "disabled",
+    "enabled": false,
+    "applied": true,
+    "schedule_active": true,
+    "schedules": [
+      {
+        "end_minute": 1440,
+        "start_minute": 0,
+        "timezone": "UTC+08:00",
+        "weekdays": 127
+      }
+    ]
+  },
+  "events": [
+    {
+      "id": 7,
+      "type": "person_region_in",
+      "task_id": 6,
+      "rule_id": 3,
+      "task_revision": 5,
+      "rule_version": 1
+    },
+    {
+      "id": 6,
+      "type": "person_region_in",
+      "task_id": 6,
+      "rule_id": 3,
+      "task_revision": 5,
+      "rule_version": 1
+    }
+  ],
+  "checks": "Browser draft/waiting/running/disabled flows verified; fake engine and mock media only"
+}

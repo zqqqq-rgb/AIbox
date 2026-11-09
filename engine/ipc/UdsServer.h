@@ -39,6 +39,10 @@ public:
     // 关全部连接 + join 线程；幂等；stop 后 emit 安全（直接丢弃）
     void stop();
 
+    // Invalidate current sessions without stopping the listener. Socket ownership
+    // stays with the I/O thread; useful when a peer must perform a fresh replay.
+    void disconnect_clients();
+
     // 命令处理器注册（main 装配时绑定各模块，详设 §3.11；需 start 前注册完）
     void on_cmd(const std::string& cmd, CmdHandler h);
 

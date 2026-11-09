@@ -21,7 +21,7 @@ inline uint64_t now_ms() {
 std::string dir_name(const std::string& dir) {
     return fs::path(dir).filename().string();
 }
-}  // namespace
+} // namespace
 
 ModelRegistry::ModelRegistry(std::string packages_root, RegistryDeps deps)
     : root_(std::move(packages_root)), deps_(std::move(deps)) {}
@@ -44,11 +44,10 @@ bool ModelRegistry::selftest(const Entry& e, std::string& err) {
         return false;
     }
     // post 冒烟：identity letterbox（scale=1, pad=0）下不崩溃且可调用
-    LetterBoxParam lb;  // 全默认 = identity
-    auto targets = e.inst->post ? e.inst->post(outs, lb)
-                                : AlgoInstance::default_post(outs, lb);
+    LetterBoxParam lb; // 全默认 = identity
+    auto targets = e.inst->post ? e.inst->post(outs, lb) : AlgoInstance::default_post(outs, lb);
     (void)targets;
-    (void)(now_ms() - t0);  // selftest 耗时仅日志参考；权威 npu_cost_ms 来自 npu_bench
+    (void)(now_ms() - t0); // selftest 耗时仅日志参考；权威 npu_cost_ms 来自 npu_bench
     return true;
 }
 
@@ -73,7 +72,8 @@ bool ModelRegistry::build(const std::string& dir, Entry& e, std::string& err) {
 
     auto infer = deps_.make_infer ? deps_.make_infer(m, dir, &err) : nullptr;
     if (!infer) {
-        if (err.empty()) err = "make_infer returned null";
+        if (err.empty())
+            err = "make_infer returned null";
         return false;
     }
 
@@ -88,6 +88,8 @@ bool ModelRegistry::build(const std::string& dir, Entry& e, std::string& err) {
         return false;
     }
     inst->post = deps_.make_post ? deps_.make_post(m, *inst->infer) : nullptr;
+    inst->post_at_threshold =
+        deps_.make_threshold_post ? deps_.make_threshold_post(m, *inst->infer) : nullptr;
 
     e.inst = std::move(inst);
     if (!selftest(e, err)) {
@@ -103,8 +105,7 @@ void ModelRegistry::load_all() {
     for (auto& pkg : scan_packages(root_)) {
         Entry e;
         std::string err;
-        const std::string id =
-            pkg.ok ? pkg.manifest.algo_id : dir_name(pkg.dir);
+        const std::string id = pkg.ok ? pkg.manifest.algo_id : dir_name(pkg.dir);
         if (pkg.ok && build(pkg.dir, e, err)) {
             // 消息先格式化再 move：emplace(std::move(e)) 后 e.pkg 已被搬空，
             // 先打印后移动会输出空 version（板上实测 "v loaded" 空版本的根因）
@@ -116,10 +117,10 @@ void ModelRegistry::load_all() {
             // 坏包/构建失败：disabled 条目保留原因，registry_ready 上报（不拖垮启动）
             Entry bad;
             bad.pkg = pkg;
-            if (bad.pkg.ok) bad.pkg.ok = false;
+            if (bad.pkg.ok)
+                bad.pkg.ok = false;
             bad.pkg.error = pkg.ok ? err : pkg.error;
-            const std::string bad_msg =
-                "[registry] " + id + " DISABLED: " + bad.pkg.error;
+            const std::string bad_msg = "[registry] " + id + " DISABLED: " + bad.pkg.error;
             entries_.emplace(id, std::move(bad));
             LOGE("registry", "%s", bad_msg.c_str());
         }
@@ -142,8 +143,7 @@ bool ModelRegistry::reload(const std::string& algo_id) {
     // 新包构建失败 → .bak 回滚（架构 §11.4.4）：备份恢复为在线包后重试一次
     std::error_code ec;
     if (fs::exists(bak, ec)) {
-        LOGE("registry", "reload %s fail(%s), rollback .bak",
-             algo_id.c_str(), err.c_str());
+        LOGE("registry", "reload %s fail(%s), rollback .bak", algo_id.c_str(), err.c_str());
         fs::remove_all(dir, ec);
         fs::rename(bak, dir, ec);
         Entry e2;
@@ -183,10 +183,10 @@ proto::RegistryReadyEvt ModelRegistry::snapshot() const {
         a.model_ref = e.pkg.manifest.model_file;
         a.trigger = e.pkg.manifest.core;
         a.npu_cost_ms = e.pkg.manifest.npu_cost_ms;
-        a.npu_mem_kb = e.mem_kb;  // 模型文件体积估算（build 时自动计算）
+        a.npu_mem_kb = e.mem_kb; // 模型文件体积估算（build 时自动计算）
         a.disabled = !e.inst;
-        a.classes = e.pkg.manifest.classes;  // manifest 白名单透传（空 = 全类）
-        a.class_names = e.pkg.manifest.class_names;  // id→名称映射透传
+        a.classes = e.pkg.manifest.classes;         // manifest 白名单透传（空 = 全类）
+        a.class_names = e.pkg.manifest.class_names; // id→名称映射透传
         evt.algos.push_back(std::move(a));
     }
     return evt;
@@ -203,4 +203,4 @@ size_t ModelRegistry::size() const {
     return entries_.size();
 }
 
-}  // namespace aibox
+} // namespace aibox

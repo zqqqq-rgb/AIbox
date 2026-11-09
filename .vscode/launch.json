@@ -1,0 +1,7 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {"name": "AIBox: Debug task tests", "type": "cppdbg", "request": "launch", "program": "${workspaceFolder}/build-dev/test_tasks", "cwd": "${workspaceFolder}", "MIMode": "gdb", "preLaunchTask": "AIBox: Build", "externalConsole": false},
+    {"name": "AIBox: Debug businessd", "type": "cppdbg", "request": "launch", "program": "${workspaceFolder}/build-dev/businessd", "args": ["--config", "${workspaceFolder}/build-dev/runtime/businessd.json"], "cwd": "${workspaceFolder}", "MIMode": "gdb", "preLaunchTask": "AIBox: Prepare Demo", "externalConsole": false}
+  ]
+}

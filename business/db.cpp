@@ -4,8 +4,11 @@
 #include <json/json.h>
 
 #include <chrono>
+#include <algorithm>
+#include <set>
 
 #include "common/Log.h"
+#include "config_compiler.h"
 
 namespace aibox {
 namespace biz {
@@ -97,6 +100,75 @@ const char* kMigrationV4 =
     "UNIQUE(camera_id, target_revision));"
     "CREATE INDEX idx_config_operations_retry ON config_operations(status,next_retry_at);";
 
+const char* kMigrationV5 =
+    "ALTER TABLE camera_config_state ADD COLUMN applied_config_json TEXT NOT NULL DEFAULT '';"
+    "ALTER TABLE camera_config_state ADD COLUMN media_main_url TEXT NOT NULL DEFAULT '';"
+    "ALTER TABLE camera_config_state ADD COLUMN media_sub_url TEXT NOT NULL DEFAULT '';"
+    "ALTER TABLE config_operations ADD COLUMN error_code INTEGER NOT NULL DEFAULT 0;";
+
+// V6: tasks own configuration. The old name remains a read-only compatibility view.
+// No JSON1 dependency: legacy ROI/rule text is copied verbatim, including invalid old input.
+const char* kMigrationV6 =
+    "CREATE TABLE capabilities(capability_id TEXT PRIMARY KEY,name TEXT NOT NULL,"
+    "rule_type TEXT NOT NULL,version INTEGER NOT NULL DEFAULT 1);"
+    "INSERT INTO capabilities(capability_id,name,rule_type) VALUES"
+    "('region_in','Area intrusion','region_in'),('dwell','Dwell','dwell'),('state_switch','State change','state_switch'),"
+    "('line_cross','Line crossing','line_cross'),('count','Count','count'),"
+    "('absence','Absence','absence'),('loitering','Loitering','loitering'),"
+    "('proximity','Proximity','proximity'),('speed','Speed','speed'),"
+    "('compound','Compound','compound'),('ref_geom','Reference geometry','ref_geom');"
+    "CREATE TABLE algorithm_tasks(id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,"
+    "kind TEXT NOT NULL CHECK(kind IN ('legacy','v2')),legacy_camera_id INTEGER UNIQUE REFERENCES cameras(id),"
+    "enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0,1)),revision INTEGER NOT NULL DEFAULT 1,"
+    "deleted_at INTEGER NOT NULL DEFAULT 0);"
+    "CREATE TABLE task_cameras(task_id INTEGER NOT NULL REFERENCES algorithm_tasks(id) ON DELETE CASCADE,"
+    "camera_id INTEGER NOT NULL REFERENCES cameras(id),PRIMARY KEY(task_id,camera_id));"
+    "CREATE TABLE task_algorithms(task_id INTEGER NOT NULL REFERENCES algorithm_tasks(id) ON DELETE CASCADE,"
+    "algo_id TEXT NOT NULL,threshold REAL NOT NULL,fps INTEGER NOT NULL,enabled INTEGER NOT NULL,"
+    "roi_display INTEGER NOT NULL DEFAULT 1,roi_color TEXT NOT NULL DEFAULT '',PRIMARY KEY(task_id,algo_id));"
+    "CREATE TABLE task_rules(id INTEGER PRIMARY KEY AUTOINCREMENT,task_id INTEGER NOT NULL,"
+    "rule_key TEXT NOT NULL,algo_id TEXT NOT NULL,capability_id TEXT NOT NULL DEFAULT '',"
+    "roi_json TEXT NOT NULL DEFAULT '',params_json TEXT NOT NULL DEFAULT '',enabled INTEGER NOT NULL DEFAULT 1,"
+    "version INTEGER NOT NULL DEFAULT 1,UNIQUE(task_id,rule_key),"
+    "FOREIGN KEY(task_id,algo_id) REFERENCES task_algorithms(task_id,algo_id) ON DELETE CASCADE);"
+    "CREATE TABLE task_schedules(task_id INTEGER NOT NULL REFERENCES algorithm_tasks(id) ON DELETE CASCADE,"
+    "position INTEGER NOT NULL,timezone TEXT NOT NULL,weekdays INTEGER NOT NULL,"
+    "start_minute INTEGER NOT NULL,end_minute INTEGER NOT NULL,PRIMARY KEY(task_id,position));"
+    "INSERT INTO algorithm_tasks(name,kind,legacy_camera_id,enabled) "
+    "SELECT 'Legacy camera '||id,'legacy',id,1 FROM cameras;"
+    "INSERT INTO task_cameras SELECT id,legacy_camera_id FROM algorithm_tasks;"
+    "INSERT INTO task_algorithms SELECT t.id,a.algo_id,a.threshold,a.detect_fps,a.enabled,"
+    "a.roi_display,COALESCE(a.roi_color,'') FROM camera_algos a JOIN algorithm_tasks t ON t.legacy_camera_id=a.camera_id;"
+    "INSERT INTO task_rules(task_id,rule_key,algo_id,roi_json,params_json) "
+    "SELECT t.id,a.algo_id,a.algo_id,COALESCE(a.roi_polygon,''),COALESCE(a.rule_json,'') "
+    "FROM camera_algos a JOIN algorithm_tasks t ON t.legacy_camera_id=a.camera_id;"
+    "DROP TABLE camera_algos;"
+    "CREATE VIEW camera_algos AS SELECT t.legacy_camera_id AS camera_id,a.algo_id,a.threshold,"
+    "a.fps AS detect_fps,r.roi_json AS roi_polygon,a.enabled,r.params_json AS rule_json,a.roi_display,a.roi_color "
+    "FROM algorithm_tasks t JOIN task_algorithms a ON a.task_id=t.id "
+    "JOIN task_rules r ON r.task_id=a.task_id AND r.rule_key=a.algo_id WHERE t.kind='legacy';"
+    "CREATE TRIGGER camera_algos_readonly_insert INSTEAD OF INSERT ON camera_algos BEGIN "
+    "SELECT RAISE(ABORT,'camera_algos is a read-only task projection'); END;"
+    "CREATE TRIGGER camera_algos_readonly_update INSTEAD OF UPDATE ON camera_algos BEGIN "
+    "SELECT RAISE(ABORT,'camera_algos is a read-only task projection'); END;"
+    "CREATE TRIGGER camera_algos_readonly_delete INSTEAD OF DELETE ON camera_algos BEGIN "
+    "SELECT RAISE(ABORT,'camera_algos is a read-only task projection'); END;"
+    "CREATE TRIGGER camera_legacy_task_insert AFTER INSERT ON cameras BEGIN "
+    "INSERT INTO algorithm_tasks(name,kind,legacy_camera_id,enabled) VALUES('Legacy camera '||NEW.id,'legacy',NEW.id,1);"
+    "INSERT INTO task_cameras SELECT id,NEW.id FROM algorithm_tasks WHERE legacy_camera_id=NEW.id; END;";
+
+// Historical sources outlive task edits/deletion; only the owning event is a foreign key.
+const char* kMigrationV7 =
+    "CREATE TABLE event_rule_sources("
+    "event_id INTEGER PRIMARY KEY REFERENCES events(id) ON DELETE CASCADE,"
+    "task_id INTEGER NOT NULL CHECK(task_id>0), rule_id INTEGER NOT NULL CHECK(rule_id>0),"
+    "task_revision INTEGER NOT NULL CHECK(task_revision>0), rule_version INTEGER NOT NULL CHECK(rule_version>0));";
+const char* kMigrationV8 =
+    "CREATE TABLE task_deployments("
+    "task_id INTEGER NOT NULL REFERENCES algorithm_tasks(id), camera_id INTEGER NOT NULL REFERENCES cameras(id),"
+    "task_revision INTEGER NOT NULL, target_revision INTEGER NOT NULL,"
+    "operation_id TEXT NOT NULL REFERENCES config_operations(operation_id), PRIMARY KEY(task_id,camera_id));";
+
 }  // namespace
 
 // ---- open / migrate ----
@@ -147,7 +219,7 @@ int Db::migrate() {
     if (cur >= kLatestVersion) return cur;  // 幂等：已是最新，零副作用
 
     static const char* const kMigrations[] = {kMigrationV1, kMigrationV2,
-                                              kMigrationV3, kMigrationV4};  // 下标 = 版本-1
+                                              kMigrationV3, kMigrationV4, kMigrationV5, kMigrationV6, kMigrationV7, kMigrationV8};
     for (int v = cur + 1; v <= kLatestVersion; ++v) {
         Txn t(*this);
         if (!t.active()) return -1;
@@ -389,7 +461,7 @@ bool Db::get_camera(int64_t id, CameraRow& out) {
     return true;
 }
 
-std::vector<CameraRow> Db::list_cameras(bool enabled_only) {
+std::vector<CameraRow> Db::list_cameras(bool enabled_only, bool include_deleted) {
     std::lock_guard<std::recursive_mutex> lk(mu_);
     std::vector<CameraRow> rows;
     const char* sql = enabled_only
@@ -410,6 +482,11 @@ std::vector<CameraRow> Db::list_cameras(bool enabled_only) {
         r.enabled = st->i64(6) != 0;
         r.online = st->i64(7) != 0;
         r.last_heartbeat = st->is_null(8) ? 0 : st->i64(8);
+        if (!include_deleted) {
+            auto state = prepare("SELECT deleted_at FROM camera_config_state WHERE camera_id=?1;");
+            if (!state || !state->bind(1, r.id)) return {};
+            if (state->step() && state->i64(0) != 0) continue;
+        }
         rows.push_back(std::move(r));
     }
     return rows;
@@ -427,7 +504,12 @@ bool Db::delete_camera_cascade(int64_t id) {
     std::lock_guard<std::recursive_mutex> lk(mu_);
     Txn t(*this);
     if (!t.active()) return false;
-    for (const char* sql : {"DELETE FROM camera_algos WHERE camera_id=?1;",
+    for (const char* sql : {"DELETE FROM task_deployments WHERE camera_id=?1;",
+                            "DELETE FROM task_rules WHERE task_id IN (SELECT id FROM algorithm_tasks WHERE legacy_camera_id=?1);",
+                            "DELETE FROM task_algorithms WHERE task_id IN (SELECT id FROM algorithm_tasks WHERE legacy_camera_id=?1);",
+                            "DELETE FROM task_schedules WHERE task_id IN (SELECT id FROM algorithm_tasks WHERE legacy_camera_id=?1);",
+                            "DELETE FROM task_cameras WHERE camera_id=?1;",
+                            "DELETE FROM algorithm_tasks WHERE legacy_camera_id=?1;",
                             "DELETE FROM config_operations WHERE camera_id=?1;",
                             "DELETE FROM camera_config_state WHERE camera_id=?1;"}) {
         auto st = prepare(sql);
@@ -451,64 +533,102 @@ bool Db::set_camera_algos(int64_t cam, const std::vector<CamAlgoRow>& rows) {
 }
 
 bool Db::set_camera_algos_impl(int64_t cam, const std::vector<CamAlgoRow>& rows) {
-    {
-        auto st = prepare("DELETE FROM camera_algos WHERE camera_id=?1;");
-        if (!st || !st->bind(1, cam) || !st->run()) return false;
-    }
+    auto task = prepare("SELECT id FROM algorithm_tasks WHERE legacy_camera_id=?1 AND kind='legacy';");
+    if (!task || !task->bind(1, cam) || !task->step()) return false;
+    const auto id = task->i64(0);
+    auto existing = list_camera_algos(cam);
+    auto ordered = rows;
+    std::sort(ordered.begin(), ordered.end(), [](const CamAlgoRow& a, const CamAlgoRow& b) { return a.algo_id < b.algo_id; });
+    CameraRow key; key.id = cam;
+    if (encode_camera_config(key, existing) == encode_camera_config(key, ordered)) return true;
+    std::set<std::string> retained;
     for (const auto& r : rows) {
-        auto st = prepare("INSERT INTO camera_algos(camera_id, algo_id, threshold, "
-                          "detect_fps, roi_polygon, enabled, rule_json, roi_display, "
-                          "roi_color) VALUES(?1,?2,?3,?4,?5,?6,?7,?8,?9);");
+        if (!retained.insert(r.algo_id).second) { err_ = "duplicate algorithm id"; return false; }
+        auto st = prepare("INSERT INTO task_algorithms(task_id,algo_id,threshold,fps,enabled,roi_display,roi_color) "
+                          "VALUES(?1,?2,?3,?4,?5,?6,?7) ON CONFLICT(task_id,algo_id) DO UPDATE SET "
+                          "threshold=excluded.threshold,fps=excluded.fps,enabled=excluded.enabled,"
+                          "roi_display=excluded.roi_display,roi_color=excluded.roi_color;");
         if (!st) return false;
-        if (!st->bind(1, cam) || !st->bind(2, r.algo_id) || !st->bind(3, r.threshold) ||
+        if (!st->bind(1, id) || !st->bind(2, r.algo_id) || !st->bind(3, r.threshold) ||
             !st->bind(4, static_cast<int64_t>(r.detect_fps)) ||
-            !st->bind(5, r.roi_json) ||
-            !st->bind(6, static_cast<int64_t>(r.enabled ? 1 : 0)) ||
-            !st->bind(7, r.rule_json) ||
-            !st->bind(8, static_cast<int64_t>(r.roi_display ? 1 : 0)) ||
-            !st->bind(9, r.roi_color))
+            !st->bind(5, static_cast<int64_t>(r.enabled)) ||
+            !st->bind(6, static_cast<int64_t>(r.roi_display != 0)) || !st->bind(7, r.roi_color))
             return false;
         if (!st->run()) return false;
+        auto rule = prepare("INSERT INTO task_rules(task_id,rule_key,algo_id,roi_json,params_json) "
+                            "VALUES(?1,?2,?2,?3,?4) ON CONFLICT(task_id,rule_key) DO UPDATE SET "
+                            "roi_json=excluded.roi_json,params_json=excluded.params_json,version=task_rules.version+1 "
+                            "WHERE roi_json!=excluded.roi_json OR params_json!=excluded.params_json;");
+        if (!rule || !rule->bind(1,id) || !rule->bind(2,r.algo_id) || !rule->bind(3,r.roi_json) ||
+            !rule->bind(4,r.rule_json) || !rule->run()) return false;
     }
-    return true;
+    for (const auto& old : existing) if (!retained.count(old.algo_id)) {
+        for (const auto* sql : {"DELETE FROM task_rules WHERE task_id=?1 AND algo_id=?2;",
+                                "DELETE FROM task_algorithms WHERE task_id=?1 AND algo_id=?2;"}) {
+            auto st = prepare(sql);
+            if (!st || !st->bind(1,id) || !st->bind(2,old.algo_id) || !st->run()) return false;
+        }
+    }
+    auto version = prepare("UPDATE algorithm_tasks SET revision=revision+1 WHERE id=?1;");
+    return version && version->bind(1,id) && version->run();
 }
 
 bool Db::submit_camera_config(const CameraRow& target, const std::vector<CamAlgoRow>& algos,
                               ConfigOperationRow& operation, int64_t expected_revision) {
     Txn txn(*this);
     if (!txn.active()) return false;
+    return submit_camera_config_impl(target,algos,operation,expected_revision) && txn.commit();
+}
+bool Db::submit_camera_config_impl(const CameraRow& target, const std::vector<CamAlgoRow>& algos,
+                                   ConfigOperationRow& operation, int64_t expected_revision, int64_t at_ms) {
     if (expected_revision < 0 || expected_revision == INT64_MAX ||
-        operation.operation_id.empty() || operation.target_config_json.empty() ||
+        operation.operation_id.empty() ||
         (operation.op_type != "create" && operation.op_type != "update" &&
          operation.op_type != "enable" && operation.op_type != "disable" &&
-         operation.op_type != "delete" && operation.op_type != "set_algos")) {
+         operation.op_type != "delete" && operation.op_type != "set_algos" &&
+         operation.op_type != "legacy_replay")) {
         err_ = "invalid configuration operation";
         return false;
     }
     const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
+    CameraRow desired = target;
+    if (desired.id == 0 && operation.op_type == "create" && expected_revision == 0) {
+        desired.id = insert_camera(desired);
+        if (desired.id <= 0) return false;
+    }
+    if (desired.id <= 0) { err_ = "invalid camera id"; return false; }
+    if (operation.op_type == "delete" || operation.op_type == "disable") desired.enabled = false;
     auto state = prepare("UPDATE camera_config_state SET desired_revision=?1, "
                          "apply_status='pending', last_error='', updated_at=?2, deleted_at=?3 "
                          "WHERE camera_id=?4 AND desired_revision=?5 AND deleted_at=0;");
     if (!state || !state->bind(1, expected_revision + 1) ||
         !state->bind(2, static_cast<int64_t>(now)) ||
         !state->bind(3, operation.op_type == "delete" ? static_cast<int64_t>(now) : int64_t{0}) ||
-        !state->bind(4, target.id) || !state->bind(5, expected_revision) || !state->run())
+        !state->bind(4, desired.id) || !state->bind(5, expected_revision) || !state->run())
         return false;
     if (changes() != 1) {
         err_ = "camera missing, deleted, or configuration revision conflict";
         return false;
     }
-    if (!update_camera(target) || !set_camera_algos_impl(target.id, algos)) return false;
+    if (!update_camera(desired) || !set_camera_algos_impl(desired.id, algos)) return false;
+    CameraConfigSnapshot full;
+    if (!build_camera_config(*this,desired,algos,operation.op_type=="delete",full,err_,nullptr,at_ms)) return false;
+    const auto snapshot=encode_camera_config(full);
+    auto supersede = prepare("UPDATE config_operations SET status='superseded',updated_at=?1 "
+                             "WHERE camera_id=?2 AND status IN ('pending','running','retry_wait');");
+    if (!supersede || !supersede->bind(1, static_cast<int64_t>(now)) ||
+        !supersede->bind(2, desired.id) || !supersede->run()) return false;
     auto st = prepare("INSERT INTO config_operations(operation_id,camera_id,op_type,"
                       "target_revision,target_config_json,previous_applied_json,created_at,updated_at) "
                       "VALUES(?1,?2,?3,?4,?5,?6,?7,?7);");
-    if (!st || !st->bind(1, operation.operation_id) || !st->bind(2, target.id) ||
+    if (!st || !st->bind(1, operation.operation_id) || !st->bind(2, desired.id) ||
         !st->bind(3, operation.op_type) || !st->bind(4, expected_revision + 1) ||
-        !st->bind(5, operation.target_config_json) ||
+        !st->bind(5, snapshot) ||
         !st->bind(6, operation.previous_applied_json) ||
-        !st->bind(7, static_cast<int64_t>(now)) || !st->run() || !txn.commit()) return false;
-    operation.camera_id = target.id;
+        !st->bind(7, static_cast<int64_t>(now)) || !st->run()) return false;
+    operation.camera_id = desired.id;
+    operation.target_config_json = snapshot;
     operation.target_revision = expected_revision + 1;
     operation.status = "pending";
     operation.attempts = 0;
@@ -521,7 +641,8 @@ bool Db::submit_camera_config(const CameraRow& target, const std::vector<CamAlgo
 bool Db::get_camera_config_state(int64_t cam, CameraConfigState& out) {
     std::lock_guard<std::recursive_mutex> lock(mu_);
     auto st = prepare("SELECT desired_revision,applied_revision,apply_status,last_error,"
-                      "deleted_at,updated_at FROM camera_config_state WHERE camera_id=?1;");
+                      "deleted_at,updated_at,applied_config_json,media_main_url,media_sub_url "
+                      "FROM camera_config_state WHERE camera_id=?1;");
     if (!st || !st->bind(1, cam) || !st->step()) return false;
     out.desired_revision = st->i64(0);
     out.applied_revision = st->i64(1);
@@ -529,6 +650,9 @@ bool Db::get_camera_config_state(int64_t cam, CameraConfigState& out) {
     out.last_error = st->text(3);
     out.deleted_at = st->i64(4);
     out.updated_at = st->i64(5);
+    out.applied_config_json = st->text(6);
+    out.media_main_url = st->text(7);
+    out.media_sub_url = st->text(8);
     return true;
 }
 
@@ -536,7 +660,7 @@ bool Db::get_config_operation(const std::string& operation_id, ConfigOperationRo
     std::lock_guard<std::recursive_mutex> lock(mu_);
     auto st = prepare("SELECT operation_id,camera_id,op_type,target_revision,target_config_json,"
                       "previous_applied_json,status,attempts,next_retry_at,last_error,created_at,"
-                      "updated_at FROM config_operations WHERE operation_id=?1;");
+                      "updated_at,error_code FROM config_operations WHERE operation_id=?1;");
     if (!st || !st->bind(1, operation_id) || !st->step()) return false;
     out.operation_id = st->text(0);
     out.camera_id = st->i64(1);
@@ -550,7 +674,16 @@ bool Db::get_config_operation(const std::string& operation_id, ConfigOperationRo
     out.last_error = st->text(9);
     out.created_at = st->i64(10);
     out.updated_at = st->i64(11);
+    out.error_code = static_cast<int>(st->i64(12));
     return true;
+}
+
+bool Db::get_current_config_operation(int64_t cam, ConfigOperationRow& out) {
+    std::lock_guard<std::recursive_mutex> lock(mu_);
+    auto st = prepare("SELECT o.operation_id FROM config_operations o JOIN camera_config_state s "
+                      "ON s.camera_id=o.camera_id AND s.desired_revision=o.target_revision "
+                      "WHERE o.camera_id=?1 LIMIT 1;");
+    return st && st->bind(1, cam) && st->step() && get_config_operation(st->text(0), out);
 }
 
 std::vector<CamAlgoRow> Db::list_camera_algos(int64_t cam) {
@@ -574,6 +707,146 @@ std::vector<CamAlgoRow> Db::list_camera_algos(int64_t cam) {
         rows.push_back(std::move(r));
     }
     return rows;
+}
+
+bool Db::recover_config_operations() {
+    Txn txn(*this);
+    if (!txn.active()) return false;
+    if (!exec("UPDATE config_operations SET status='retry_wait',next_retry_at=0 "
+              "WHERE status='running';"
+              "UPDATE camera_config_state SET apply_status='retry_wait' WHERE apply_status='running';")) return false;
+    return txn.commit();
+}
+
+bool Db::invalidate_runtime_config_states() {
+    return exec("UPDATE camera_config_state SET apply_status='unknown' "
+                "WHERE apply_status!='legacy_inactive';");
+}
+
+bool Db::request_camera_replay(const CameraConfigSnapshot& target) {
+    std::lock_guard<std::recursive_mutex> lock(mu_);
+    CameraConfigState state;
+    if (!get_camera_config_state(target.camera.id, state)) return false;
+    {
+        Txn txn(*this);
+        if (!txn.active()) return false;
+        auto op = prepare("UPDATE config_operations SET status='retry_wait',next_retry_at=0 "
+                          "WHERE camera_id=?1 AND target_revision=?2;");
+        if (!op || !op->bind(1, target.camera.id) || !op->bind(2, state.desired_revision) || !op->run()) return false;
+        if (changes() == 1) {
+            auto pending = prepare("UPDATE camera_config_state SET apply_status='retry_wait' WHERE camera_id=?1;");
+            return pending && pending->bind(1, target.camera.id) && pending->run() && txn.commit();
+        }
+        if (!txn.commit()) return false;
+    }
+    // Legacy rows have no operation/revision yet. Give their failed replay a
+    // durable operation so media/engine recovery does not require another restart.
+    ConfigOperationRow operation;
+    operation.operation_id = "replay-" + std::to_string(target.camera.id) + "-" +
+        std::to_string(std::chrono::system_clock::now().time_since_epoch().count());
+    operation.op_type = target.deleted ? "delete" :
+        (state.apply_status == "legacy_inactive" ? "legacy_replay" : "update");
+    operation.previous_applied_json = state.applied_config_json;
+    return submit_camera_config(target.camera, target.algos, operation, state.desired_revision);
+}
+
+std::vector<ConfigOperationRow> Db::due_config_operations(int64_t now, int limit) {
+    std::lock_guard<std::recursive_mutex> lock(mu_);
+    std::vector<ConfigOperationRow> rows;
+    auto st = prepare("SELECT o.operation_id FROM config_operations o JOIN camera_config_state s "
+                      "ON s.camera_id=o.camera_id AND s.desired_revision=o.target_revision "
+                      "WHERE o.status IN ('pending','retry_wait') AND o.next_retry_at<=?1 "
+                      "ORDER BY o.created_at,o.operation_id LIMIT ?2;");
+    if (!st || !st->bind(1, now) || !st->bind(2, static_cast<int64_t>(limit))) return rows;
+    while (st->step()) {
+        ConfigOperationRow row;
+        if (!get_config_operation(st->text(0), row)) return {};
+        rows.push_back(std::move(row));
+    }
+    return rows;
+}
+
+std::vector<std::string> Db::reserved_config_snapshots(int64_t cam) {
+    std::lock_guard<std::recursive_mutex> lock(mu_);
+    std::vector<std::string> rows;
+    auto st = prepare("SELECT o.target_config_json,o.previous_applied_json FROM config_operations o "
+                      "JOIN camera_config_state s ON s.camera_id=o.camera_id "
+                      "WHERE o.camera_id=?1 AND o.target_revision>s.applied_revision "
+                      "AND (o.attempts>0 OR o.status IN ('pending','running','retry_wait'));");
+    if (!st || !st->bind(1, cam)) return rows;
+    while (st->step()) { rows.push_back(st->text(0)); rows.push_back(st->text(1)); }
+    return rows;
+}
+
+bool Db::claim_config_operation(const std::string& id) {
+    Txn txn(*this);
+    if (!txn.active()) return false;
+    auto st = prepare("UPDATE config_operations SET status='running',attempts=attempts+1 "
+                      "WHERE operation_id=?1 AND status IN ('pending','retry_wait') "
+                      "AND target_revision=(SELECT desired_revision FROM camera_config_state "
+                      "WHERE camera_id=config_operations.camera_id);");
+    if (!st || !st->bind(1, id) || !st->run() || changes() != 1) return false;
+    auto state = prepare("UPDATE camera_config_state SET apply_status='running' WHERE camera_id="
+                         "(SELECT camera_id FROM config_operations WHERE operation_id=?1);");
+    return state && state->bind(1, id) && state->run() && txn.commit();
+}
+
+bool Db::finish_config_operation(const ConfigOperationRow& operation, const std::string& status,
+                                 int code, const std::string& error, int64_t retry_at) {
+    Txn txn(*this);
+    if (!txn.active()) return false;
+    if (status != "succeeded" && status != "retry_wait" && status != "failed") return false;
+    const auto now = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+    auto op = prepare("UPDATE config_operations SET status=?1,error_code=?2,last_error=?3,"
+                      "next_retry_at=?4,updated_at=?5 WHERE operation_id=?6 AND status='running';");
+    if (!op || !op->bind(1, status) || !op->bind(2, static_cast<int64_t>(code)) ||
+        !op->bind(3, error) || !op->bind(4, retry_at) || !op->bind(5, static_cast<int64_t>(now)) ||
+        !op->bind(6, operation.operation_id) || !op->run() || changes() != 1) return false;
+    auto state = prepare("UPDATE camera_config_state SET apply_status=CASE WHEN ?1='succeeded' AND "
+                         "EXISTS(SELECT 1 FROM config_operations WHERE operation_id=?7 AND op_type='legacy_replay') "
+                         "THEN 'legacy_inactive' ELSE ?1 END,last_error=?2,updated_at=?3,"
+                         "applied_revision=CASE WHEN ?1='succeeded' THEN ?4 ELSE applied_revision END,"
+                         "applied_config_json=CASE WHEN ?1='succeeded' THEN ?5 ELSE applied_config_json END "
+                         "WHERE camera_id=?6 AND desired_revision=?4;");
+    if (!state || !state->bind(1, status) || !state->bind(2, error) ||
+        !state->bind(3, static_cast<int64_t>(now)) || !state->bind(4, operation.target_revision) ||
+        !state->bind(5, operation.target_config_json) || !state->bind(6, operation.camera_id) ||
+        !state->bind(7, operation.operation_id) ||
+        !state->run()) return false;
+    return txn.commit();
+}
+
+bool Db::confirm_camera_replay(int64_t cam, int64_t revision, const std::string& snapshot) {
+    Txn txn(*this);
+    if (!txn.active()) return false;
+    auto st = prepare("UPDATE camera_config_state SET applied_revision=?1,applied_config_json=?2,"
+                      "apply_status=CASE WHEN apply_status='legacy_inactive' OR EXISTS(SELECT 1 FROM config_operations "
+                      "WHERE camera_id=?3 AND target_revision=?1 AND op_type='legacy_replay') "
+                      "THEN 'legacy_inactive' ELSE 'succeeded' END,last_error='' "
+                      "WHERE camera_id=?3 AND desired_revision=?1;");
+    if (!st || !st->bind(1, revision) || !st->bind(2, snapshot) || !st->bind(3, cam) ||
+        !st->run() || changes() != 1) return false;
+    auto op = prepare("UPDATE config_operations SET status='succeeded',error_code=0,last_error='',"
+                      "next_retry_at=0 WHERE camera_id=?1 AND target_revision=?2;");
+    return op && op->bind(1, cam) && op->bind(2, revision) && op->run() && txn.commit();
+}
+
+bool Db::set_camera_media(int64_t cam, bool main, const std::string& source, const std::string& key) {
+    Txn txn(*this);
+    if (!txn.active()) return false;
+    auto st = prepare(main ? "UPDATE camera_config_state SET media_main_url=?1 WHERE camera_id=?2;"
+                           : "UPDATE camera_config_state SET media_sub_url=?1 WHERE camera_id=?2;");
+    if (!st || !st->bind(1, source) || !st->bind(2, cam) || !st->run() || changes() != 1) return false;
+    auto keys = prepare(main ? "UPDATE cameras SET zlm_key_main=?1 WHERE id=?2;"
+                             : "UPDATE cameras SET zlm_key_sub=?1 WHERE id=?2;");
+    return keys && keys->bind(1, key) && keys->bind(2, cam) && keys->run() && txn.commit();
+}
+
+int Db::pending_config_operations() {
+    std::lock_guard<std::recursive_mutex> lock(mu_);
+    auto st = prepare("SELECT count(*) FROM config_operations WHERE status IN ('pending','running','retry_wait');");
+    return st && st->step() ? static_cast<int>(st->i64(0)) : -1;
 }
 
 // ---- algorithms ----
@@ -654,6 +927,10 @@ std::vector<AlgoMetaRow> Db::list_algorithms_meta() {
 
 int64_t Db::insert_event(const EventRow& r) {
     std::lock_guard<std::recursive_mutex> lk(mu_);
+    const bool sourced = r.task_id || r.rule_id || r.task_revision || r.rule_version;
+    if (sourced && (r.task_id <= 0 || r.rule_id <= 0 || r.task_revision <= 0 || r.rule_version <= 0)) return -1;
+    Txn txn(*this);
+    if (!txn.active()) return -1;
     auto st = prepare("INSERT INTO events(camera_id, algo_id, type, ts, snapshot_path, "
                       "targets_json, reported) VALUES(?1,?2,?3,?4,?5,?6,?7);");
     if (!st) return -1;
@@ -662,7 +939,13 @@ int64_t Db::insert_event(const EventRow& r) {
         !st->bind(7, static_cast<int64_t>(r.reported ? 1 : 0)))
         return -1;
     if (!st->run()) return -1;
-    return last_insert_rowid();
+    const auto id = last_insert_rowid();
+    if (sourced) {
+        auto source = prepare("INSERT INTO event_rule_sources VALUES(?1,?2,?3,?4,?5);");
+        if (!source || !source->bind(1,id) || !source->bind(2,r.task_id) || !source->bind(3,r.rule_id) ||
+            !source->bind(4,r.task_revision) || !source->bind(5,r.rule_version) || !source->run()) return -1;
+    }
+    return txn.commit() ? id : -1;
 }
 
 std::vector<EventRow> Db::list_events(int64_t camera_id, const std::string& algo_id,
@@ -672,8 +955,9 @@ std::vector<EventRow> Db::list_events(int64_t camera_id, const std::string& algo
     // 自动编号 ?（按出现顺序 1,2,3...）与绑定顺序严格一致——禁止固定 ?N 跳号：
     // 条件过滤缺席时 LIMIT ?5 与实际绑定序错位（板上实测踩中：LIMIT 落 NULL）
     std::string sql =
-        "SELECT id, camera_id, algo_id, type, ts, snapshot_path, targets_json, reported "
-        "FROM events WHERE 1=1";
+        "SELECT e.id, camera_id, algo_id, type, ts, snapshot_path, targets_json, reported, "
+        "s.task_id, s.rule_id, s.task_revision, s.rule_version "
+        "FROM events e LEFT JOIN event_rule_sources s ON s.event_id=e.id WHERE 1=1";
     if (camera_id > 0) sql += " AND camera_id=?";
     if (!algo_id.empty()) sql += " AND algo_id=?";
     if (from_ms > 0) sql += " AND ts>=?";
@@ -697,6 +981,8 @@ std::vector<EventRow> Db::list_events(int64_t camera_id, const std::string& algo
         r.snapshot_path = st->is_null(5) ? "" : st->text(5);
         r.targets_json = st->is_null(6) ? "" : st->text(6);
         r.reported = st->i64(7) != 0;
+        r.task_id = st->i64(8); r.rule_id = st->i64(9);
+        r.task_revision = st->i64(10); r.rule_version = st->i64(11);
         rows.push_back(std::move(r));
     }
     return rows;

@@ -48,6 +48,22 @@ add_executable(test_rule_engine test_rule_engine.cpp)
 target_link_libraries(test_rule_engine PRIVATE aibox_core)
 add_test(NAME rule_engine COMMAND test_rule_engine)
 
+add_executable(test_rule_runtime test_rule_runtime.cpp)
+target_link_libraries(test_rule_runtime PRIVATE aibox_business)
+add_test(NAME rule_runtime COMMAND test_rule_runtime)
+set_tests_properties(rule_runtime PROPERTIES TIMEOUT 30 LABELS "businessd_phase2")
+
+add_executable(test_engine_v2 test_engine_v2.cpp)
+target_link_libraries(test_engine_v2 PRIVATE aibox_business)
+add_dependencies(test_engine_v2 core-engine-fake businessd)
+add_test(NAME engine_v2 COMMAND test_engine_v2 $<TARGET_FILE:core-engine-fake> $<TARGET_FILE:businessd>)
+set_tests_properties(engine_v2 PROPERTIES TIMEOUT 40 LABELS "businessd_phase2")
+
+add_executable(test_task_runtime test_task_runtime.cpp)
+target_link_libraries(test_task_runtime PRIVATE aibox_business)
+add_test(NAME task_runtime COMMAND test_task_runtime)
+set_tests_properties(task_runtime PROPERTIES TIMEOUT 40 LABELS "businessd_phase2")
+
 add_executable(test_degrade test_degrade.cpp)
 target_link_libraries(test_degrade PRIVATE aibox_core)
 add_test(NAME degrade COMMAND test_degrade)
@@ -82,6 +98,29 @@ add_executable(test_config_compiler test_config_compiler.cpp)
 target_link_libraries(test_config_compiler PRIVATE aibox_business)
 add_test(NAME config_compiler COMMAND test_config_compiler)
 
+add_executable(test_tasks test_tasks.cpp)
+target_link_libraries(test_tasks PRIVATE aibox_business)
+add_test(NAME tasks COMMAND test_tasks)
+set_tests_properties(tasks PROPERTIES TIMEOUT 30 LABELS "businessd_phase2")
+
+add_executable(test_camera_service test_camera_service.cpp)
+target_link_libraries(test_camera_service PRIVATE aibox_business)
+add_test(NAME camera_service COMMAND test_camera_service)
+
+add_executable(test_business_startup test_business_startup.cpp)
+target_link_libraries(test_business_startup PRIVATE aibox_business)
+add_dependencies(test_business_startup businessd)
+add_test(NAME business_startup COMMAND test_business_startup $<TARGET_FILE:businessd>)
+set_tests_properties(camera_service business_startup PROPERTIES TIMEOUT 30)
+
+add_executable(test_business_recovery test_business_recovery.cpp)
+target_link_libraries(test_business_recovery PRIVATE aibox_business)
+add_dependencies(test_business_recovery businessd)
+add_test(NAME business_recovery COMMAND test_business_recovery $<TARGET_FILE:businessd>)
+set_tests_properties(business_recovery PROPERTIES TIMEOUT 90 LABELS "businessd_phase1")
+add_test(NAME task_recovery COMMAND test_business_recovery $<TARGET_FILE:businessd> --tasks-only)
+set_tests_properties(task_recovery PROPERTIES TIMEOUT 90 LABELS "businessd_phase2")
+
 add_executable(test_uds_client test_uds_client.cpp)
 target_link_libraries(test_uds_client PRIVATE aibox_business)
 add_test(NAME uds_client COMMAND test_uds_client)
@@ -98,6 +137,11 @@ add_executable(test_ws_hub test_ws_hub.cpp)
 target_link_libraries(test_ws_hub PRIVATE aibox_business)
 add_test(NAME ws_hub COMMAND test_ws_hub)
 
+add_executable(test_ws_limits test_ws_limits.cpp)
+target_link_libraries(test_ws_limits PRIVATE aibox_business)
+add_test(NAME ws_limits COMMAND test_ws_limits)
+set_tests_properties(ws_hub ws_limits PROPERTIES TIMEOUT 30)
+
 add_executable(test_janitor test_janitor.cpp)
 target_link_libraries(test_janitor PRIVATE aibox_business)
 add_test(NAME janitor COMMAND test_janitor)
@@ -105,3 +149,22 @@ add_test(NAME janitor COMMAND test_janitor)
 add_executable(test_onvif test_onvif.cpp)
 target_link_libraries(test_onvif PRIVATE aibox_business)
 add_test(NAME onvif COMMAND test_onvif)
+
+add_executable(test_camera_discovery test_camera_discovery.cpp)
+target_link_libraries(test_camera_discovery PRIVATE aibox_business)
+add_test(NAME camera_discovery COMMAND test_camera_discovery)
+
+add_executable(test_access_session test_access_session.cpp)
+target_link_libraries(test_access_session PRIVATE aibox_business)
+add_test(NAME access_session COMMAND test_access_session)
+
+add_executable(test_remote_access test_remote_access.cpp)
+target_link_libraries(test_remote_access PRIVATE aibox_business)
+add_test(NAME remote_access COMMAND test_remote_access)
+set_tests_properties(remote_access PROPERTIES TIMEOUT 30)
+
+# Phase-one smoke uses Linux businessd and local doubles; no RKNN/board is needed.
+set_tests_properties(db config_compiler camera_service business_startup uds_client
+    zlm_client http_api ws_hub ws_limits
+    PROPERTIES LABELS "businessd_phase1")
+set_property(TEST db config_compiler http_api APPEND PROPERTY LABELS "businessd_phase2")

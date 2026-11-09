@@ -1,0 +1,25 @@
+Internal ctest changing into directory: /tmp/aibox-build
+Test project /tmp/aibox-build
+    Start 12: rule_runtime
+1/6 Test #12: rule_runtime .....................   Passed    0.01 sec
+    Start 13: engine_v2
+2/6 Test #13: engine_v2 ........................   Passed    1.66 sec
+    Start 20: db
+3/6 Test #20: db ...............................   Passed    0.10 sec
+    Start 21: config_compiler
+4/6 Test #21: config_compiler ..................   Passed    0.00 sec
+    Start 22: tasks
+5/6 Test #22: tasks ............................   Passed    0.04 sec
+    Start 28: http_api
+6/6 Test #28: http_api .........................   Passed    2.34 sec
+
+100% tests passed, 0 tests failed out of 6
+
+Label Time Summary:
+businessd_phase1    =   2.44 sec*proc (3 tests)
+businessd_phase2    =   4.14 sec*proc (6 tests)
+
+Total Test time (real) =   4.15 sec
+[check-headers] OK —— aibox_core 无硬件头文件
+PASS: V2 drafts, compiler, rule runtime, engine capability negotiation and durable source events
+SKIP: durable multi-camera activation, scheduled runtime application and board integration

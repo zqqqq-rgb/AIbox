@@ -10,9 +10,13 @@
 #include <arpa/inet.h>
 
 #include <atomic>
+#include <chrono>
+#include <functional>
 #include <cstdlib>
 #include <cstring>
 #include <mutex>
+#include <map>
+#include <set>
 #include <poll.h>
 #include <string>
 #include <thread>
@@ -40,10 +44,19 @@ inline std::string url_decode(const std::string& s) {
 
 class MockZlm {
 public:
+    ~MockZlm() { stop(); }
     std::atomic<bool> fail_sub_add{false};  // addStreamProxy _sub 恒失败
+    std::atomic<bool> invalid_response{false};
     std::atomic<int> add_main{0};
     std::atomic<int> add_sub{0};
     std::atomic<int> del{0};
+    std::atomic<int> response_byte_delay_ms{0};
+    // Configure before requests start; allows process shutdown tests to hold getSnap open.
+    std::function<void()> on_snapshot;
+    void after_delete(std::function<void(const std::string&)> callback) {
+        std::lock_guard<std::mutex> lock(mu_);
+        after_delete_ = std::move(callback);
+    }
 
     bool start() {
         listen_fd_ = ::socket(AF_INET, SOCK_STREAM, 0);
@@ -80,9 +93,22 @@ public:
     int port() const { return port_; }
 
     // 预置"已存在的代理"（getMediaList 返回；幂等用例）
-    void seed_proxy(const std::string& app, const std::string& stream) {
+    void seed_proxy(const std::string& app, const std::string& stream, const std::string& source = "") {
         std::lock_guard<std::mutex> lk(mu_);
         existing_.emplace_back(app, stream);
+        sources_[stream] = source;
+    }
+    std::string source(const std::string& stream) {
+        std::lock_guard<std::mutex> lock(mu_);
+        return sources_.count(stream) ? sources_[stream] : "";
+    }
+    void reset_proxies() {
+        std::lock_guard<std::mutex> lock(mu_);
+        existing_.clear(); sources_.clear();
+    }
+    void reject_source(const std::string& source, bool reject) {
+        std::lock_guard<std::mutex> lk(mu_);
+        if (reject) rejected_.insert(source); else rejected_.erase(source);
     }
 
     std::vector<std::string> deleted_keys() {
@@ -174,7 +200,10 @@ private:
         resp += "Connection: close\r\n\r\n" + body;
         size_t off = 0;
         while (off < resp.size()) {
-            const ssize_t n = ::send(fd, resp.data() + off, resp.size() - off, 0);
+            const int delay = response_byte_delay_ms.load();
+            if (delay > 0) std::this_thread::sleep_for(std::chrono::milliseconds(delay));
+            const ssize_t n = ::send(fd, resp.data() + off,
+                                    delay > 0 ? 1 : resp.size() - off, MSG_NOSIGNAL);
             if (n <= 0) break;
             off += static_cast<size_t>(n);
         }
@@ -182,6 +211,11 @@ private:
 
     std::string route(const std::string& path,
                       const std::vector<std::pair<std::string, std::string>>& params) {
+        if (path == "/index/api/getSnap" && on_snapshot) {
+            on_snapshot();
+            return std::string("\xff\xd8\xff\xd9", 4);
+        }
+        if (invalid_response) return "[]";
         auto get = [&](const std::string& k) -> std::string {
             for (const auto& kv : params)
                 if (kv.first == k) return kv.second;
@@ -194,14 +228,16 @@ private:
             if (is_sub && fail_sub_add.load())
                 return "{\"code\":-1,\"msg\":\"mock sub fail\"}";
             std::lock_guard<std::mutex> lk(mu_);
+            if (rejected_.count(get("url"))) return "{\"code\":-1,\"msg\":\"source rejected\"}";
             existing_.emplace_back(get("app"), stream);
+            sources_[stream] = get("url");
             return "{\"code\":0,\"data\":{\"key\":\"__defaultVhost__/live/" + stream +
                    "\"}}";
         }
         if (path == "/index/api/delStreamProxy") {
             ++del;
             const std::string key = get("key");
-            std::lock_guard<std::mutex> lk(mu_);
+            std::unique_lock<std::mutex> lk(mu_);
             deleted_.push_back(key);
             // 从 existing_ 摘除（key = vhost/app/stream）
             const size_t p1 = key.find('/');
@@ -209,12 +245,16 @@ private:
             if (p1 != std::string::npos && p2 != std::string::npos) {
                 const std::string app = key.substr(p1 + 1, p2 - p1 - 1);
                 const std::string stream = key.substr(p2 + 1);
+                sources_.erase(stream);
                 for (size_t i = 0; i < existing_.size(); ++i)
                     if (existing_[i].first == app && existing_[i].second == stream) {
                         existing_.erase(existing_.begin() + static_cast<long>(i));
                         break;
                     }
             }
+            auto callback = after_delete_;
+            lk.unlock();
+            if (callback) callback(key);
             return "{\"code\":0}";
         }
         if (path == "/index/api/getMediaList") {
@@ -238,6 +278,9 @@ private:
     std::mutex mu_;
     std::vector<std::pair<std::string, std::string>> existing_;
     std::vector<std::string> deleted_;
+    std::map<std::string, std::string> sources_;
+    std::set<std::string> rejected_;
+    std::function<void(const std::string&)> after_delete_;
 };
 
 }  // namespace testutil

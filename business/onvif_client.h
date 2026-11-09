@@ -4,7 +4,7 @@
 //    收集 ProbeMatches 的 XAddrs（无鉴权，ONVIF 设备开机即响应）。
 // 1b. HTTP 网段兜底（与组播并行）：对每个接口所在 /24 逐 IP 发
 //    GetSystemDateAndTime（ONVIF 免鉴权规范调用）——专治关闭 discovery 但
-//    ONVIF 服务在 80 口的相机（海康新固件默认关等）。64 并发 ~2s。
+//    ONVIF 服务在 80 口的相机。扫描范围、并发和总时限受 DiscoveryOptions 限制。
 // 1c. RTSP 探测（同网段并行）：554 口 OPTIONS 免鉴权应答即 RTSP 设备；
 //    顺带探 8000（海康 SDK 口）标 hik——与开源端口扫描工具发现能力对齐。
 // 2. ONVIF SOAP 取流：GetProfiles → 前 2 个 Profile 各 GetStreamUri，得到主/子码流 RTSP。
@@ -15,6 +15,7 @@
 // 错误码约定（详设 §8.2 摄像头段）：2001 网络/协议失败，2002 账密错误。
 #pragma once
 
+#include <cstddef>
 #include <string>
 #include <vector>
 
@@ -50,7 +51,44 @@ struct DiscoveredDevice {
     std::string xaddr;  // onvif=Device Service 地址；rtsp=rtsp://ip:554
     std::string kind = "onvif";  // "onvif" | "rtsp"（rtsp=未开 ONVIF 但 554 有 RTSP 服务）
     bool hik = false;            // rtsp 设备且 8000（海康 SDK 口）开放 → 取流路径按海康预填
+    std::string source;          // ws_discovery / http_onvif / http_candidate / rtsp
+    bool confirmed = false;      // 协议已确认；不表示摄像头品牌、凭据或视频连接成功
 };
+
+struct DiscoveryInterface {
+    std::string name, address, netmask, cidr;
+};
+struct DiscoveryOptions {
+    std::string interface_name;
+    std::string cidr;
+    int timeout_ms = 3000; // 总扫描窗口，500..10000ms
+};
+struct DiscoveryPlan {
+    std::vector<DiscoveryInterface> interfaces;
+    std::vector<std::string> targets;
+    std::vector<std::string> cidrs;
+};
+struct DiscoveryResult {
+    int code = 0;
+    std::string message = "scan completed";
+    std::vector<DiscoveredDevice> devices;
+    size_t target_count = 0, attempted_count = 0;
+    int elapsed_ms = 0;
+    bool timed_out = false;
+    std::vector<std::string> warnings;
+};
+
+// 仅列本机已启用、非回环 IPv4 接口。cidr 表示接口直连子网。
+std::vector<DiscoveryInterface> enumerate_discovery_interfaces();
+// 无网络/系统调用的范围规划。显式 CIDR 必须指定网卡且完全包含于其直连子网。
+// 默认每网卡最多所在 /24；总候选不超过1024，排除本机地址及网络/广播地址。
+bool plan_discovery_targets(const std::vector<DiscoveryInterface>& interfaces,
+                            const DiscoveryOptions& options, DiscoveryPlan& plan,
+                            std::string& error);
+DiscoveryResult discover_cameras(const DiscoveryOptions& options);
+
+// 纯响应分类，HTTP鉴权或SOAP fault仅作为待认证候选，不确认ONVIF实现。
+bool classify_onvif_probe_response(const std::string& response, bool& confirmed);
 
 // 组播 Probe 并收集 timeout_ms 毫秒内的响应（期间每 500ms 重发一次）。
 // 无设备/无网络返回空列表（不报错——扫描失败不该炸 REST）。

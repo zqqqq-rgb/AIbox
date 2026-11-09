@@ -1,4 +1,5 @@
 #include "uds_client.h"
+#include "task_compiler.h"
 
 #include <fcntl.h>
 #include <poll.h>
@@ -54,9 +55,21 @@ void UdsClient::start() {
 
 void UdsClient::stop() {
     if (!running_.exchange(false)) return;  // 幂等
-    close_sock();                           // 唤醒阻塞在 poll 的线程
+    disconnect("stopped");
     if (th_.joinable()) th_.join();
-    fail_all_pending("stopped");
+}
+
+std::unique_ptr<UdsClient::ConfigurationLease> UdsClient::begin_configuration() {
+    std::unique_lock<std::mutex> lock(configuration_mu_, std::try_to_lock);
+    if (!lock.owns_lock() || !online()) return nullptr;
+    return std::unique_ptr<ConfigurationLease>(new ConfigurationLease(*this, std::move(lock)));
+}
+
+void UdsClient::disconnect(const char* reason) {
+    set_state(State::DISCONNECTED);
+    ++epoch_;
+    fail_all_pending(reason);  // Wake the lease holder BEFORE waiting on any transport lock.
+    close_sock();
 }
 
 UdsClient::SyncStats UdsClient::sync_stats() const {
@@ -93,6 +106,7 @@ bool UdsClient::connect_once() {
     // 持 send_mu_ 落 fd：防 stop() 的 close_sock exchange(-1) 与 store 竞态漏关 fd
     {
         std::lock_guard<std::mutex> lk(send_mu_);
+        if (!running_.load()) { ::close(fd); return false; }
         sock_.store(fd, std::memory_order_relaxed);
     }
     return true;
@@ -104,14 +118,19 @@ void UdsClient::close_sock() {
     if (fd >= 0) ::close(fd);
 }
 
-bool UdsClient::send_line(const std::string& line) {
+bool UdsClient::send_line(const std::string& line, uint64_t expected_epoch) {
     std::lock_guard<std::mutex> lk(send_mu_);
     const int fd = sock_.load(std::memory_order_relaxed);
-    if (fd < 0) return false;
+    if (fd < 0 || (expected_epoch && (expected_epoch != connection_epoch() || !online()))) return false;
     std::string buf = line;
     buf.push_back('\n');  // JSON-lines 帧定界
     size_t off = 0;
+    const int64_t deadline = now_ms() + p_.ack_timeout_ms;
     while (off < buf.size()) {
+        if (!running_.load() || now_ms() >= deadline) {
+            ::shutdown(fd, SHUT_RDWR);  // A truncated JSON line cannot be reused.
+            return false;
+        }
         const ssize_t n = ::send(fd, buf.data() + off, buf.size() - off, MSG_NOSIGNAL);
         if (n > 0) {
             off += static_cast<size_t>(n);
@@ -119,7 +138,8 @@ bool UdsClient::send_line(const std::string& line) {
         }
         if (n < 0 && errno == EINTR) continue;
         if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK)) {
-            ::poll(nullptr, 0, 1);  // 缓冲区满（对端僵死）极短让路后重试
+            pollfd writable{fd, POLLOUT, 0};
+            ::poll(&writable, 1, 10);
             continue;
         }
         return false;  // EPIPE/ECONNRESET/EBADF：断连，上层转 DISCONNECTED
@@ -238,12 +258,13 @@ bool UdsClient::wait_ack_here(uint64_t msg_id, proto::Ack& out, int timeout_ms) 
             pending_.erase(msg_id);
             return false;
         }
-        if (!pump(50)) return false;  // 断连
+        if (!pump(50)) { disarm_pending(msg_id); return false; }
     }
 }
 
 // 跨线程等待（HttpApi 线程）：client 线程 pump 分发 ack 后 notify 唤醒
 proto::Ack UdsClient::request_for(uint64_t msg_id, const std::string& line, int timeout_ms) {
+    const auto expected_epoch = connection_epoch();
     {
         std::lock_guard<std::mutex> lk(ack_mu_);
         pending_[msg_id] = {};
@@ -251,7 +272,7 @@ proto::Ack UdsClient::request_for(uint64_t msg_id, const std::string& line, int 
     proto::Ack out;
     out.ret = -1;
     out.msg = "not connected";
-    if (!send_line(line)) {
+    if (!send_line(line, expected_epoch)) {
         std::lock_guard<std::mutex> lk(ack_mu_);
         pending_.erase(msg_id);
         return out;
@@ -294,6 +315,15 @@ proto::Ack UdsClient::add_cam(const proto::AddCam& v) {
 proto::Ack UdsClient::set_algos(const proto::SetAlgos& v) {
     std::lock_guard<std::mutex> lk(cmd_mu_);
     if (!online()) return offline_ack();
+    if (v.config_version == 2) {
+        std::string error;
+        if (!proto::validate_v2_config(v,error)) { proto::Ack a; a.ret=1001; a.msg=error; return a; }
+        const auto capability_id = next_msg_id();
+        const auto caps = request_for(capability_id, proto::encode_request(capability_id,proto::GetCapabilities{}),p_.ack_timeout_ms);
+        if (caps.ret!=0 || !caps.has_data || !proto::supports_rule_v2(caps.data)) {
+            proto::Ack a; a.ret=1003; a.msg="engine does not advertise V2 rule support"; return a;
+        }
+    }
     const uint64_t mid = next_msg_id();
     return request_for(mid, proto::encode_request(mid, v), p_.ack_timeout_ms);
 }
@@ -323,6 +353,16 @@ bool UdsClient::get_metrics(std::string* data_out, int timeout_ms) {
     return true;
 }
 
+bool UdsClient::get_capabilities(std::string* data_out, int timeout_ms) {
+    std::lock_guard<std::mutex> lk(cmd_mu_);
+    if (!online()) return false;
+    const auto mid = next_msg_id();
+    auto ack = request_for(mid, proto::encode_request(mid,proto::GetCapabilities{}),timeout_ms);
+    if (ack.ret!=0 || !ack.has_data) return false;
+    if (data_out) *data_out=std::move(ack.data);
+    return true;
+}
+
 bool UdsClient::sub_meta(uint32_t cam, bool subscribe) {
     {
         std::lock_guard<std::mutex> lk(ack_mu_);
@@ -341,6 +381,9 @@ bool UdsClient::sub_meta(uint32_t cam, bool subscribe) {
 
 bool UdsClient::do_sync() {
     SyncStats st;
+    // Recompute before replay: the previous window may have expired offline.
+    if (!db_.refresh_task_schedules(p_.schedule_now ? p_.schedule_now() : task_now_ms())) return false;
+    if (!db_.invalidate_runtime_config_states()) return false;
     // 1. ZLM 代理重建（详设 §5.7-5：getMediaList 对比 DB，ZLM 重启过则逐台重建）
     if (hooks_.ensure_proxies) {
         ++st.ensure_proxies_calls;
@@ -348,28 +391,76 @@ bool UdsClient::do_sync() {
             LOGW("uds-client", "ensure_proxies 失败（继续同步；engine 拉流失败会自愈重试）");
     }
     // 2. 读 DB
-    const auto cams = db_.list_cameras(true);
+    const auto cams = db_.list_cameras(false, true);
     int degraded = 0;
+    bool capabilities_checked=false, supports_v2=false;
     // 3. 逐台 add_cam → set_algos（失败重试 ack_retries 次；degraded 继续下一台）
     for (const auto& cam : cams) {
         bool cam_ok = true;
-        proto::SetAlgos sa;
+        CameraConfigState config_state;
+        if (!db_.get_camera_config_state(cam.id, config_state)) return false;
+        const auto rows = db_.list_camera_algos(cam.id);
+        CameraConfigSnapshot snapshot{cam, rows, config_state.deleted_at != 0};
+        CompiledCameraConfig compiled;
         std::string compile_error;
-        if (!compile_algos(static_cast<uint32_t>(cam.id), db_.list_camera_algos(cam.id),
-                           sa, compile_error)) {
+        ConfigOperationRow desired;
+        const bool loaded = db_.get_current_config_operation(cam.id,desired)
+            ? decode_camera_config(desired.target_config_json,snapshot)
+            : build_camera_config(db_,cam,rows,config_state.deleted_at!=0,snapshot,compile_error);
+        if (!loaded || snapshot.camera.id!=cam.id || !compile_camera_config(snapshot, p_.media_host, p_.media_rtsp_port,
+                                   compiled, compile_error)) {
             LOGW("uds-client", "cam %lld invalid configuration: %s",
                  static_cast<long long>(cam.id), compile_error.c_str());
             ++st.set_algos_fail;
             ++degraded;
+            if (!db_.request_camera_replay(snapshot)) return false;
             continue;  // Do not silently replace a broken ROI with full-frame detection.
         }
-        proto::AddCam ac;
-        ac.id = static_cast<uint32_t>(cam.id);
-        ac.rtsp_sub = cam.rtsp_sub;
-        if (!cam.rtsp_main.empty()) {
-            ac.rtsp_main = cam.rtsp_main;
-            ac.has_rtsp_main = true;
+        if (compiled.algos.config_version==2) {
+            if(!capabilities_checked) {
+                capabilities_checked=true;
+                const auto mid=next_msg_id(); arm_pending(mid);
+                if(!send_line(proto::encode_request(mid,proto::GetCapabilities{}))) { disarm_pending(mid); return false; }
+                proto::Ack ack;
+                supports_v2=wait_ack_here(mid,ack,p_.ack_timeout_ms) && ack.ret==0 && ack.has_data && proto::supports_rule_v2(ack.data);
+            }
+            if(!supports_v2) {
+                ++degraded; ++st.set_algos_fail;
+                if(!db_.request_camera_replay(snapshot)) return false;
+                continue;
+            }
         }
+        if (hooks_.prepare_camera && !hooks_.prepare_camera(snapshot)) {
+            ++degraded;
+            if (!db_.request_camera_replay(snapshot)) return false;
+            continue;
+        }
+        if (!cam.enabled || snapshot.deleted) {
+            proto::RemoveCam remove;
+            remove.id = static_cast<uint32_t>(cam.id);
+            bool stopped = false;
+            for (int attempt = 0; attempt <= p_.ack_retries && !stopped; ++attempt) {
+                const auto mid = next_msg_id();
+                arm_pending(mid);
+                if (!send_line(proto::encode_request(mid, remove))) { disarm_pending(mid); return false; }
+                proto::Ack ack;
+                stopped = wait_ack_here(mid, ack, p_.ack_timeout_ms) && (ack.ret == 0 || ack.ret == 1002);
+            }
+            if (stopped) {
+                db_.set_camera_online(cam.id, false);
+                if (!db_.confirm_camera_replay(cam.id, config_state.desired_revision,
+                        encode_camera_config(snapshot))) {
+                    ++degraded;
+                    if (!db_.request_camera_replay(snapshot)) return false;
+                }
+            } else {
+                ++degraded;
+                if (!db_.request_camera_replay(snapshot)) return false;
+            }
+            continue;
+        }
+        const auto& ac = compiled.add;
+        const auto& sa = compiled.algos;
         bool added = false;
         bool rebuilt = false;
         proto::Ack ack;
@@ -418,11 +509,15 @@ bool UdsClient::do_sync() {
                 if (wait_ack_here(mid, ack, p_.ack_timeout_ms) && ack.ret == 0) applied = true;
             }
             if (applied) ++st.set_algos_ok; else ++st.set_algos_fail;
-            if (!applied) cam_ok = false;
+            if (!applied || !db_.confirm_camera_replay(cam.id, config_state.desired_revision,
+                                        encode_camera_config(snapshot))) cam_ok = false;
         } else {
             cam_ok = false;
         }
-        if (!cam_ok) ++degraded;
+        if (!cam_ok) {
+            ++degraded;
+            if (!db_.request_camera_replay(snapshot)) return false;
+        }
     }
     st.degraded_cams = degraded;
     {
@@ -439,6 +534,10 @@ bool UdsClient::do_sync() {
 
 void UdsClient::loop() {
     while (running_.load()) {
+        std::unique_lock<std::mutex> replay_lock(configuration_mu_, std::defer_lock);
+        while (running_.load() && !replay_lock.try_lock())
+            std::this_thread::sleep_for(std::chrono::milliseconds(5));
+        if (!running_.load()) break;
         // DISCONNECTED → connect（1s 重试，详设 §5.2）
         if (!connect_once()) {
             set_state(State::DISCONNECTED);
@@ -449,12 +548,11 @@ void UdsClient::loop() {
         rbuf_.clear();
         set_state(State::SYNCING);
         if (!do_sync() || !running_.load()) {
-            close_sock();
-            set_state(State::DISCONNECTED);  // 同步中断线 → 重连重同步
-            fail_all_pending("disconnected");
+            disconnect("disconnected");
             continue;
         }
         set_state(State::ONLINE);
+        replay_lock.unlock();
 
         // 重连后重发订阅（engine 重启不丢 WsHub 订阅；详设 §5.3 UDS 全量重同步语义）
         std::vector<uint32_t> subs;
@@ -507,17 +605,13 @@ void UdsClient::loop() {
                 last_ping = now;
                 ping_mid = next_msg_id();
                 ping_sent_ms = now;
-                std::lock_guard<std::mutex> lk(ack_mu_);
-                pending_[ping_mid] = {};
-                pending_[ping_mid].is_ping = true;
+                arm_pending(ping_mid);
                 if (!send_line(proto::encode_request(ping_mid, proto::GetMetrics{}))) {
                     alive = false;
                 }
             }
         }
-        close_sock();
-        set_state(State::DISCONNECTED);
-        fail_all_pending("disconnected");
+        disconnect("disconnected");
     }
 }
 

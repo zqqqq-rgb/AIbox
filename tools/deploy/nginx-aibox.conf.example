@@ -1,0 +1,67 @@
+# Include this file inside nginx's http {} context. Replace domain/certificates
+# and the three upstream endpoints before use. Only the WebRTC signaling API is
+# proxied to ZLM; its administrative APIs and secret must stay private.
+map $http_upgrade $aibox_connection_upgrade {
+    default upgrade;
+    '' close;
+}
+limit_req_zone $binary_remote_addr zone=aibox_login:10m rate=5r/m;
+
+upstream aibox_http { server 127.0.0.1:18080; }
+upstream aibox_ws { server 127.0.0.1:18081; }
+upstream aibox_zlm { server 127.0.0.1:18082; }
+
+server {
+    listen 443 ssl;
+    server_name aibox.example.com;
+    ssl_certificate /etc/aibox/tls/fullchain.pem;
+    ssl_certificate_key /etc/aibox/tls/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    client_max_body_size 3m;
+    add_header X-Content-Type-Options nosniff always;
+    add_header Referrer-Policy same-origin always;
+
+    location = /_aibox_auth {
+        internal;
+        proxy_pass http://aibox_http/api/auth/check;
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_set_header Host $http_host;
+        proxy_set_header Cookie $http_cookie;
+        proxy_set_header Authorization $http_authorization;
+    }
+
+    location = /api/auth/login {
+        limit_req zone=aibox_login burst=5 nodelay;
+        proxy_pass http://aibox_http;
+        proxy_set_header Host $http_host;
+        proxy_set_header Origin $http_origin;
+    }
+
+    location /ws/ {
+        proxy_pass http://aibox_ws;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $aibox_connection_upgrade;
+        proxy_set_header Host $http_host;
+        proxy_set_header Origin $http_origin;
+        proxy_set_header Cookie $http_cookie;
+        proxy_read_timeout 90s;
+    }
+
+    location = /media/index/api/webrtc {
+        auth_request /_aibox_auth;
+        proxy_pass http://aibox_zlm/index/api/webrtc;
+        proxy_set_header Host $http_host;
+        proxy_read_timeout 30s;
+    }
+    location /media/ { return 404; }
+    location /index/api/ { return 404; }
+
+    location / {
+        proxy_pass http://aibox_http;
+        proxy_set_header Host $http_host;
+        proxy_set_header Origin $http_origin;
+        proxy_read_timeout 20s;
+    }
+}

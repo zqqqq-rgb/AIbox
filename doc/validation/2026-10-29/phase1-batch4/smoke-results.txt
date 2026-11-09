@@ -1,0 +1,33 @@
+Phase-one smoke: businessd + SQLite + FakeEngine + MockZlm + TCP WebSocket clients
+Internal ctest changing into directory: /tmp/aibox-build
+Test project /tmp/aibox-build
+      Start 18: db
+ 1/10 Test #18: db ...............................   Passed    0.09 sec
+      Start 19: config_compiler
+ 2/10 Test #19: config_compiler ..................   Passed    0.00 sec
+      Start 20: camera_service
+ 3/10 Test #20: camera_service ...................   Passed   11.80 sec
+      Start 21: business_startup
+ 4/10 Test #21: business_startup .................   Passed    5.98 sec
+      Start 22: business_recovery
+ 5/10 Test #22: business_recovery ................   Passed    4.37 sec
+      Start 23: uds_client
+ 6/10 Test #23: uds_client .......................   Passed    2.46 sec
+      Start 24: zlm_client
+ 7/10 Test #24: zlm_client .......................   Passed    0.33 sec
+      Start 25: http_api
+ 8/10 Test #25: http_api .........................   Passed    2.16 sec
+      Start 26: ws_hub
+ 9/10 Test #26: ws_hub ...........................   Passed    0.22 sec
+      Start 27: ws_limits
+10/10 Test #27: ws_limits ........................   Passed    0.31 sec
+
+100% tests passed, 0 tests failed out of 10
+
+Label Time Summary:
+businessd_phase1    =  27.71 sec*proc (10 tests)
+
+Total Test time (real) =  27.72 sec
+[check-headers] OK —— aibox_core 无硬件头文件
+SKIP: physical board/RKNN and real camera/ZLM integration (requires target equipment)
+PASS: automated phase-one smoke; see the acceptance matrix for scenarios still uncovered

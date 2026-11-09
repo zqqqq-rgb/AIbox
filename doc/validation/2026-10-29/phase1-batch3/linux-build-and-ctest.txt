@@ -1,0 +1,198 @@
+29.9.2
+-- The CXX compiler identification is GNU 13.3.0
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Configuring done (0.3s)
+-- Generating done (0.0s)
+-- Build files have been written to: /tmp/aibox-build
+[  1%] Building CXX object engine/CMakeFiles/aibox_core.dir/core/version.cpp.o
+[  2%] Building CXX object engine/CMakeFiles/aibox_core.dir/core/fakes/file_source.cpp.o
+[  3%] Building CXX object engine/CMakeFiles/aibox_core.dir/core/fakes/file_decoder.cpp.o
+[  4%] Building CXX object engine/CMakeFiles/aibox_core.dir/core/fakes/soft_letterbox.cpp.o
+[  5%] Building CXX object engine/CMakeFiles/aibox_core.dir/core/fakes/fake_infer.cpp.o
+[  6%] Building CXX object engine/CMakeFiles/aibox_core.dir/common/EdgeMeter.cpp.o
+[  7%] Building CXX object engine/CMakeFiles/aibox_core.dir/common/FramePool.cpp.o
+[  8%] Building CXX object engine/CMakeFiles/aibox_core.dir/common/LetterboxMath.cpp.o
+[  9%] Building CXX object engine/CMakeFiles/aibox_core.dir/media/Sampler.cpp.o
+[ 10%] Building CXX object engine/CMakeFiles/aibox_core.dir/media/CameraChannel.cpp.o
+[ 11%] Building CXX object engine/CMakeFiles/aibox_core.dir/infer/NpuCorePlan.cpp.o
+[ 13%] Building CXX object engine/CMakeFiles/aibox_core.dir/infer/NpuScheduler.cpp.o
+[ 14%] Building CXX object engine/CMakeFiles/aibox_core.dir/infer/Yolov8Post.cpp.o
+[ 15%] Building CXX object engine/CMakeFiles/aibox_core.dir/model/AlgoPackage.cpp.o
+[ 16%] Building CXX object engine/CMakeFiles/aibox_core.dir/model/ModelRegistry.cpp.o
+[ 17%] Building CXX object engine/CMakeFiles/aibox_core.dir/rules/RuleEngine.cpp.o
+[ 18%] Building CXX object engine/CMakeFiles/aibox_core.dir/arbiter/DegradeController.cpp.o
+[ 19%] Building CXX object engine/CMakeFiles/aibox_core.dir/track/TrackerHub.cpp.o
+[ 20%] Building CXX object engine/CMakeFiles/aibox_core.dir/ipc/Protocol.cpp.o
+[ 21%] Building CXX object engine/CMakeFiles/aibox_core.dir/ipc/UdsServer.cpp.o
+[ 22%] Linking CXX static library libaibox_core.a
+[ 22%] Built target aibox_core
+[ 25%] Building CXX object tests/CMakeFiles/test_edge_meter.dir/test_edge_meter.cpp.o
+[ 25%] Building CXX object tests/CMakeFiles/test_bounded_queue.dir/test_bounded_queue.cpp.o
+[ 27%] Building CXX object business/CMakeFiles/aibox_business.dir/db.cpp.o
+[ 27%] Building CXX object tests/CMakeFiles/test_fakes.dir/test_fakes.cpp.o
+[ 28%] Linking CXX executable ../test_edge_meter
+[ 28%] Built target test_edge_meter
+[ 29%] Linking CXX executable ../test_bounded_queue
+[ 30%] Building CXX object tests/CMakeFiles/test_frame_pool.dir/test_frame_pool.cpp.o
+[ 30%] Built target test_bounded_queue
+[ 31%] Building CXX object tests/CMakeFiles/test_letterbox_math.dir/test_letterbox_math.cpp.o
+[ 32%] Linking CXX executable ../test_fakes
+[ 32%] Built target test_fakes
+[ 33%] Building CXX object tests/CMakeFiles/test_sampler.dir/test_sampler.cpp.o
+[ 34%] Linking CXX executable ../test_sampler
+[ 34%] Built target test_sampler
+[ 35%] Linking CXX executable ../test_letterbox_math
+[ 36%] Building CXX object tests/CMakeFiles/test_uds_protocol.dir/test_uds_protocol.cpp.o
+[ 36%] Built target test_letterbox_math
+[ 38%] Building CXX object tests/CMakeFiles/test_npu_scheduler.dir/test_npu_scheduler.cpp.o
+[ 39%] Linking CXX executable ../test_frame_pool
+[ 39%] Built target test_frame_pool
+[ 40%] Building CXX object tests/CMakeFiles/test_npu_core_plan.dir/test_npu_core_plan.cpp.o
+[ 41%] Linking CXX executable ../test_npu_core_plan
+[ 41%] Built target test_npu_core_plan
+[ 42%] Building CXX object tests/CMakeFiles/test_camera_channel.dir/test_camera_channel.cpp.o
+[ 43%] Linking CXX executable ../test_uds_protocol
+[ 43%] Built target test_uds_protocol
+[ 44%] Building CXX object tests/CMakeFiles/test_rule_engine.dir/test_rule_engine.cpp.o
+[ 45%] Linking CXX executable ../test_npu_scheduler
+[ 45%] Built target test_npu_scheduler
+[ 46%] Building CXX object tests/CMakeFiles/test_degrade.dir/test_degrade.cpp.o
+[ 47%] Linking CXX executable ../test_camera_channel
+[ 47%] Built target test_camera_channel
+[ 48%] Building CXX object tests/CMakeFiles/test_tracker.dir/test_tracker.cpp.o
+[ 50%] Building CXX object business/CMakeFiles/aibox_business.dir/config_compiler.cpp.o
+[ 51%] Linking CXX executable ../test_tracker
+[ 52%] Linking CXX executable ../test_degrade
+[ 52%] Built target test_tracker
+[ 53%] Building CXX object tests/CMakeFiles/test_uds_server.dir/test_uds_server.cpp.o
+[ 54%] Linking CXX executable ../test_rule_engine
+[ 54%] Built target test_degrade
+[ 55%] Building CXX object tests/CMakeFiles/test_yolov8_post.dir/test_yolov8_post.cpp.o
+[ 55%] Built target test_rule_engine
+[ 56%] Building CXX object tests/CMakeFiles/test_algo_package.dir/test_algo_package.cpp.o
+[ 57%] Linking CXX executable ../test_yolov8_post
+[ 57%] Built target test_yolov8_post
+[ 58%] Building CXX object tests/CMakeFiles/test_model_registry.dir/test_model_registry.cpp.o
+[ 59%] Linking CXX executable ../test_algo_package
+[ 60%] Linking CXX executable ../test_uds_server
+[ 60%] Built target test_algo_package
+[ 61%] Building CXX object business/CMakeFiles/aibox_business.dir/resource_budget.cpp.o
+[ 61%] Built target test_uds_server
+[ 63%] Building CXX object business/CMakeFiles/aibox_business.dir/camera_service.cpp.o
+[ 64%] Building CXX object business/CMakeFiles/aibox_business.dir/reconciler.cpp.o
+[ 65%] Building CXX object business/CMakeFiles/aibox_business.dir/uds_client.cpp.o
+[ 66%] Linking CXX executable ../test_model_registry
+[ 66%] Built target test_model_registry
+[ 67%] Building CXX object business/CMakeFiles/aibox_business.dir/zlm_client.cpp.o
+[ 68%] Building CXX object business/CMakeFiles/aibox_business.dir/http_api.cpp.o
+[ 69%] Building CXX object business/CMakeFiles/aibox_business.dir/ws_server.cpp.o
+[ 70%] Building CXX object business/CMakeFiles/aibox_business.dir/hook_server.cpp.o
+[ 71%] Building CXX object business/CMakeFiles/aibox_business.dir/janitor.cpp.o
+[ 72%] Building CXX object business/CMakeFiles/aibox_business.dir/onvif_client.cpp.o
+[ 73%] Linking CXX static library libaibox_business.a
+[ 73%] Built target aibox_business
+[ 75%] Building CXX object tests/CMakeFiles/test_db.dir/test_db.cpp.o
+[ 77%] Building CXX object tests/CMakeFiles/test_config_compiler.dir/test_config_compiler.cpp.o
+[ 77%] Building CXX object business/CMakeFiles/businessd.dir/main.cpp.o
+[ 78%] Building CXX object tests/CMakeFiles/test_camera_service.dir/test_camera_service.cpp.o
+[ 79%] Linking CXX executable ../test_config_compiler
+[ 79%] Built target test_config_compiler
+[ 80%] Building CXX object tests/CMakeFiles/test_uds_client.dir/test_uds_client.cpp.o
+[ 81%] Linking CXX executable ../businessd
+[ 81%] Built target businessd
+[ 82%] Building CXX object tests/CMakeFiles/test_zlm_client.dir/test_zlm_client.cpp.o
+[ 83%] Linking CXX executable ../test_db
+[ 83%] Built target test_db
+[ 84%] Building CXX object tests/CMakeFiles/test_http_api.dir/test_http_api.cpp.o
+[ 85%] Linking CXX executable ../test_uds_client
+[ 85%] Built target test_uds_client
+[ 86%] Building CXX object tests/CMakeFiles/test_ws_hub.dir/test_ws_hub.cpp.o
+[ 88%] Linking CXX executable ../test_zlm_client
+[ 88%] Built target test_zlm_client
+[ 89%] Building CXX object tests/CMakeFiles/test_ws_limits.dir/test_ws_limits.cpp.o
+[ 90%] Linking CXX executable ../test_camera_service
+[ 90%] Built target test_camera_service
+[ 91%] Building CXX object tests/CMakeFiles/test_janitor.dir/test_janitor.cpp.o
+[ 92%] Linking CXX executable ../test_ws_limits
+[ 92%] Built target test_ws_limits
+[ 93%] Building CXX object tests/CMakeFiles/test_onvif.dir/test_onvif.cpp.o
+[ 94%] Linking CXX executable ../test_ws_hub
+[ 94%] Built target test_ws_hub
+[ 95%] Building CXX object tests/CMakeFiles/test_business_startup.dir/test_business_startup.cpp.o
+[ 96%] Linking CXX executable ../test_onvif
+[ 96%] Built target test_onvif
+[ 97%] Linking CXX executable ../test_janitor
+[ 97%] Built target test_janitor
+[ 98%] Linking CXX executable ../test_http_api
+[ 98%] Built target test_http_api
+[100%] Linking CXX executable ../test_business_startup
+[100%] Built target test_business_startup
+Internal ctest changing into directory: /tmp/aibox-build
+Test project /tmp/aibox-build
+      Start  1: fakes
+ 1/28 Test  #1: fakes ............................   Passed    0.08 sec
+      Start  2: edge_meter
+ 2/28 Test  #2: edge_meter .......................   Passed    0.02 sec
+      Start  3: bounded_queue
+ 3/28 Test  #3: bounded_queue ....................   Passed    0.12 sec
+      Start  4: frame_pool
+ 4/28 Test  #4: frame_pool .......................   Passed    0.01 sec
+      Start  5: letterbox_math
+ 5/28 Test  #5: letterbox_math ...................   Passed    0.00 sec
+      Start  6: sampler
+ 6/28 Test  #6: sampler ..........................   Passed    0.00 sec
+      Start  7: uds_protocol
+ 7/28 Test  #7: uds_protocol .....................   Passed    0.00 sec
+      Start  8: npu_scheduler
+ 8/28 Test  #8: npu_scheduler ....................   Passed    2.05 sec
+      Start  9: npu_core_plan
+ 9/28 Test  #9: npu_core_plan ....................   Passed    0.00 sec
+      Start 10: camera_channel
+10/28 Test #10: camera_channel ...................   Passed    2.54 sec
+      Start 11: rule_engine
+11/28 Test #11: rule_engine ......................   Passed    0.00 sec
+      Start 12: degrade
+12/28 Test #12: degrade ..........................   Passed    0.60 sec
+      Start 13: tracker
+13/28 Test #13: tracker ..........................   Passed    0.00 sec
+      Start 14: uds_server
+14/28 Test #14: uds_server .......................   Passed    6.08 sec
+      Start 15: yolov8_post
+15/28 Test #15: yolov8_post ......................   Passed    0.00 sec
+      Start 16: algo_package
+16/28 Test #16: algo_package .....................   Passed    0.01 sec
+      Start 17: model_registry
+17/28 Test #17: model_registry ...................   Passed    0.01 sec
+      Start 18: db
+18/28 Test #18: db ...............................   Passed    0.09 sec
+      Start 19: config_compiler
+19/28 Test #19: config_compiler ..................   Passed    0.00 sec
+      Start 20: camera_service
+20/28 Test #20: camera_service ...................   Passed    4.55 sec
+      Start 21: business_startup
+21/28 Test #21: business_startup .................   Passed    5.99 sec
+      Start 22: uds_client
+22/28 Test #22: uds_client .......................   Passed    1.85 sec
+      Start 23: zlm_client
+23/28 Test #23: zlm_client .......................   Passed    0.33 sec
+      Start 24: http_api
+24/28 Test #24: http_api .........................   Passed    1.82 sec
+      Start 25: ws_hub
+25/28 Test #25: ws_hub ...........................   Passed    0.21 sec
+      Start 26: ws_limits
+26/28 Test #26: ws_limits ........................   Passed    0.31 sec
+      Start 27: janitor
+27/28 Test #27: janitor ..........................   Passed    0.01 sec
+      Start 28: onvif
+28/28 Test #28: onvif ............................   Passed    0.00 sec
+
+100% tests passed, 0 tests failed out of 28
+
+Label Time Summary:
+businessd_phase1    =  15.16 sec*proc (9 tests)
+
+Total Test time (real) =  26.70 sec
