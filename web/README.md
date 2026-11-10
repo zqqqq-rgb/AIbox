@@ -1,5 +1,9 @@
 # web/ —— 静态 SPA（businessd 托管，零构建链）
 
+2026-11-09：新增 `access.js` / `access.css`（设备登录与重登）、`connection_model.js`（HTTPS/WSS 和扫描参数），摄像头页支持选网卡与范围，任务页支持按需加载快照。当前前端测试 53/53，通过真实 REST 的浏览器检查见 `doc/validation/2026-11-09/remote-scan/`。部署时复制全部生产 `.js`、`.css`、`index.html` 和 `vendor/`，不能仅按下方旧文件清单拷贝。
+
+2026-11-10：已补本机 Nginx HTTPS/WSS 的 7 组浏览器联调，证据见 `doc/validation/2026-11-10/proxy-browser/`。该验证使用自签证书、fake 推理和模拟媒体，不代表真实视频或公网已验收。
+
 前端设计依据：《AIBox_前端设计_独立式_V1.0》（impl/ 下，页面/契约/对齐方案/工控深色视觉规范）。
 
 ## 文件结构

@@ -11,6 +11,7 @@ import { colorOf } from './overlay_core.js';
 import { pageTasks } from './task_page.js';
 import { installAccessGate } from './access.js';
 import { scanRequest } from './connection_model.js';
+import { showEventDetail } from './event_detail.js';
 
 const $view = () => document.getElementById('view');
 let appReady = false;
@@ -320,6 +321,7 @@ async function pageCameras() {
     const scanControls = h('div', 'panel scan-controls');
     const interfaceLabel = h('label', '', '扫描网卡');
     const interfaceSelect = h('select');
+    interfaceSelect.setAttribute('aria-label', '扫描网卡');
     interfaceSelect.appendChild(new Option('自动选择本机网卡', ''));
     interfaceLabel.appendChild(interfaceSelect);
     const cidrLabel = h('label', '', '扫描范围（选填）');
@@ -327,6 +329,7 @@ async function pageCameras() {
     cidrLabel.appendChild(cidrInput);
     const timeoutLabel = h('label', '', '等待时间');
     const timeoutSelect = h('select');
+    timeoutSelect.setAttribute('aria-label', '等待时间');
     for (const seconds of [3, 5, 10]) timeoutSelect.appendChild(new Option(`${seconds} 秒`, String(seconds * 1000)));
     timeoutLabel.appendChild(timeoutSelect);
     const scopeHint = h('p', 'dim small', '扫描由盒子在现场网络执行；发现设备后仍需验证账号与取流。');
@@ -1036,6 +1039,8 @@ async function pageAlgos() {
 // 单列表布局：历史检索为主体；WS 实时事件按当前筛选条件头插进同一列表
 // （原"实时流 | 历史检索"左右双栏已并入——实时区与历史区是同一份数据流）
 async function pageEvents() {
+    let alive = true, closeDetail = null;
+    const snapshotTimers = new Set();
     const wrap = h('div', 'page');
     wrap.appendChild(h('h2', '', '事件中心'));
     const histCol = h('div', 'col');
@@ -1074,6 +1079,11 @@ async function pageEvents() {
     //          下行 = 触发 class 芯片（targets 的 cls 去重，classesOf 映射名）
     function eventRow(j) {
         const row = h('div', 'lrow ev-row');
+        const hasEventId = Number.isSafeInteger(j.event_id) && j.event_id > 0;
+        if (hasEventId) {
+            row.dataset.eventId = String(j.event_id);
+            row.appendChild(h('span', 'mono dim', `事件 #${j.event_id}`));
+        }
         row.append(
             h('span', 'mono dim', fmtMs(j.ts)),
             h('span', 'mono', `cam${j.id}`),
@@ -1087,7 +1097,7 @@ async function pageEvents() {
             j.snap ? h('span', 'ok-txt', '有快照') : h('span', 'dim', '无快照'));
         // class 芯片：targets 的触发类别去重（每类一个，颜色随 classOf 主题）
         const seen = new Set();
-        for (const t of j.targets || []) {
+        for (const t of Array.isArray(j.targets) ? j.targets : []) {
             if (seen.has(t.cls)) continue;
             seen.add(t.cls);
         }
@@ -1098,7 +1108,14 @@ async function pageEvents() {
                     classesOf[c] ?? `cls${c}`}</span>`).join('');
             row.appendChild(sub);
         }
-        row.onclick = () => eventDetail(j);
+        const detailButton = h('button', 'btn btn-acc', '查看详情');
+        detailButton.disabled = !hasEventId;
+        detailButton.title = hasEventId ? `查询事件 #${j.event_id}` : '等待关联本地事件 ID，可点击查询刷新';
+        detailButton.onclick = () => {
+            closeDetail?.();
+            closeDetail = showEventDetail(j.event_id, { cameraName: camName, classesOf });
+        };
+        row.append(detailButton);
         return row;
     }
 
@@ -1113,14 +1130,14 @@ async function pageEvents() {
             to: dloc2ms(inpTo.value),
             limit: 100,
         });
+        if (!alive) return;
         histList.innerHTML = '';
         if (!evs.length) { tri(histList, 'empty', { emptyText: '无匹配事件' }); return; }
         for (const e of evs) {
-            // DB 列名 → WS 字段名对齐：algo_id→algo、camera_id→id（eventRow 与
-            // 详情弹窗都按 WS 契约取 j.algo/j.id；j.id 原是事件行 id，直接用会
-            // 把"cam+事件id"错显成摄像头）
+            // 列表沿用 WS 的 id=摄像头 ID；单独保留 event_id 查询持久化详情。
             histList.appendChild(eventRow({
                 ...e,
+                event_id: e.id,
                 id: e.camera_id,
                 algo: e.algo_id,
                 ts: e.ts,
@@ -1129,7 +1146,7 @@ async function pageEvents() {
         }
     }
     qBtn.onclick = () => query().catch(() => {});
-    query();
+    query().catch(() => {});
 
     // WS 实时头插：新事件过当前筛选条件 → 列表顶部插入（上限 100 与查询一致）。
     // businessd 落库先于 WS 广播，头插的事件已入库，查询中的竞态由随后的
@@ -1150,17 +1167,23 @@ async function pageEvents() {
     // 2s 后按 cam+时间窗静默单查，按 ts 精确命中即就地替换该行——不重建
     // 列表、不打断浏览；仍无快照（截图失败/流断）保持"无快照"，下次查询兜底
     function refreshRowSnap(j, row) {
-        setTimeout(async () => {
+        const timer = setTimeout(async () => {
+            snapshotTimers.delete(timer);
+            if (!alive) return;
             try {
                 const evs = await api.listEvents({
                     camera_id: j.id, from: j.ts - 1000, to: j.ts + 1000, limit: 10,
                 }, { silent: true });
-                const hit = evs.find((e) => e.ts === j.ts);
-                if (hit && hit.snapshot && row.isConnected) {
-                    row.replaceWith(eventRow({ ...j, snap: hit.snapshot }));
+                const matches = evs.filter((e) => e.ts === j.ts && e.algo_id === j.algo && e.type === j.type &&
+                    (e.task_id || 0) === (j.task_id || 0) && (e.rule_id || 0) === (j.rule_id || 0) &&
+                    (e.task_revision || 0) === (j.task_revision || 0) && (e.rule_version || 0) === (j.rule_version || 0));
+                if (matches.length === 1 && alive && row.isConnected) {
+                    const hit = matches[0];
+                    row.replaceWith(eventRow({ ...j, event_id: hit.id, snap: hit.snapshot || j.snap }));
                 }
             } catch (_) { /* 静默：回填失败不扰用户 */ }
         }, 2000);
+        snapshotTimers.add(timer);
     }
     const offLive = onEvent('event', (j) => {
         if (!liveChk.checked) return;  // 实时开关关闭：只存查询态，不做头插
@@ -1172,34 +1195,10 @@ async function pageEvents() {
         const row = eventRow(j);
         histList.prepend(row);
         while (histList.children.length > 100) histList.lastChild.remove();
-        if (!j.snap) refreshRowSnap(j, row);
+        refreshRowSnap(j, row);
     });
 
-    function eventDetail(j) {
-        const root = document.getElementById('modal-root');
-        const mask = h('div', 'mask');
-        const tg = (j.targets || []).map((t) =>
-            `#${t.track_id} ${classesOf[t.cls] ?? t.cls} ${Math.round(t.conf * 100)}%`).join('、');
-        // 快照：businessd 截图落 recordings/snap/ → /recordings 挂载直出；
-        // DB 存绝对路径，HTTP url 取文件名段（basename）
-        const snapUrl = j.snap
-            ? '/recordings/snap/' + String(j.snap).split('/').pop()
-            : null;
-        mask.innerHTML = `<div class="modal"><div class="m-title">${j.type} @cam${j.id}（${j.algo}）</div>
-            <div class="m-body">
-            ${snapUrl ? `<img src="${snapUrl}" alt="快照"
-                style="max-width:100%;border:1px solid var(--line2);border-radius:4px;"
-                onerror="this.outerHTML='<div class=\\'dim\\'>快照文件已清理</div>'">`
-                      : '<div class="dim">无快照</div>'}
-            <div class="mono dim small">${tg || '无目标'}</div>
-            <div class="mono dim small">${fmtMs(j.ts)}</div></div>
-            <div class="m-btns"><button class="btn" id="d-ok">关闭</button></div></div>`;
-        mask.querySelector('#d-ok').onclick = () => mask.remove();
-        mask.addEventListener('click', (e) => { if (e.target === mask) mask.remove(); });
-        root.appendChild(mask);
-    }
-
-    return { unmount() { offLive(); } };
+    return { unmount() { alive = false; closeDetail?.(); snapshotTimers.forEach(clearTimeout); offLive(); } };
 }
 
 // ============================================================ #/recordings
@@ -1345,8 +1344,9 @@ async function pageSettings() {
 if (typeof document !== 'undefined') {
     let topbarStarted = false;
     installAccessGate({
-        async onAuthenticated() {
+        async onAuthenticated(isCurrent) {
             const info = await api.systemInfo({ silent: true });
+            if (!isCurrent()) return;
             configureConnections(info);
             appReady = true;
             loadClasses();

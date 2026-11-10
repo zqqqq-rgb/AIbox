@@ -8,10 +8,11 @@ export function installAccessGate({ onAuthenticated, onExpired }) {
     let checking = false;
     let authenticated = false;
     let generation = 0;
+    let messageNode = null;
     const button = document.getElementById('access-logout');
 
     function showGate(message = '') {
-        if (gate) return;
+        if (gate) { if (messageNode) messageNode.textContent = message; return; }
         onExpired();
         authenticated = false;
         if (button) button.hidden = true;
@@ -22,9 +23,10 @@ export function installAccessGate({ onAuthenticated, onExpired }) {
         const input = h('input');
         input.type = 'password'; input.autocomplete = 'current-password'; input.required = true;
         input.name = 'credential'; label.appendChild(input);
-        const error = h('p', 'warn-txt', message); error.setAttribute('role', 'alert');
+        const error = h('p', 'warn-txt', message); error.setAttribute('role', 'alert'); messageNode = error;
         const submit = h('button', 'btn btn-acc', '登录'); submit.type = 'submit';
-        form.append(label, error, submit); gate.appendChild(form); document.body.appendChild(gate);
+        const retry = h('button', 'btn', '重新连接'); retry.type = 'button'; retry.onclick = () => check();
+        form.append(label, error, submit, retry); gate.appendChild(form); document.body.appendChild(gate);
         form.onsubmit = async (event) => {
             event.preventDefault();
             if (!input.value || submit.disabled) return;
@@ -48,19 +50,23 @@ export function installAccessGate({ onAuthenticated, onExpired }) {
         try {
             const status = await api.authStatus();
             if (current !== generation) return;
-            if (status.auth_required && !status.authenticated) { showGate(); return; }
-            gate?.remove(); gate = null;
-            if (button) button.hidden = !status.auth_required;
+            if (status.auth_required && !status.authenticated) { authenticated = false; showGate(); return; }
             if (!authenticated) {
                 authenticated = true;
-                await onAuthenticated();
+                await onAuthenticated(() => current === generation && authenticated);
             }
+            if (current !== generation) return;
+            gate?.remove(); gate = null; messageNode = null;
+            if (button) button.hidden = !status.auth_required;
         } catch (failure) {
-            showGate(`设备暂不可达：${failure.message}`);
-        } finally { checking = false; }
+            if (current === generation) {
+                authenticated = false;
+                showGate(`设备暂不可达：${failure.message}`);
+            }
+        } finally { if (current === generation) checking = false; }
     }
 
-    const expired = () => { ++generation; checking = false; showGate('登录已失效，请重新登录'); };
+    const expired = () => { ++generation; checking = false; authenticated = false; showGate('登录已失效，请重新登录'); };
     window.addEventListener('aibox-auth-required', expired);
     if (button) button.onclick = async () => {
         button.disabled = true;

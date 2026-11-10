@@ -87,6 +87,7 @@ add_library(aibox_business STATIC
   janitor.cpp
   onvif_client.cpp
   access_session.cpp
+  event_service.cpp
 )
 target_include_directories(aibox_business PUBLIC
   ${CMAKE_CURRENT_SOURCE_DIR}

@@ -1,0 +1,10 @@
+{
+  "event_id": 12,
+  "detail_url": "http://localhost:8080/api/events/12",
+  "code": 0,
+  "camera_id": 3,
+  "task_id": 7,
+  "rule_id": 6,
+  "invalid_id_code": 1001,
+  "missing_id_code": 1002
+}

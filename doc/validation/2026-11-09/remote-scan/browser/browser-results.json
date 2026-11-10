@@ -1,0 +1,12 @@
+{
+  "checks": [
+    "unauthorized shell and incorrect credential",
+    "authenticated bootstrap failure recovers via retry",
+    "cookie login and task page bootstrap",
+    "draft creation, real REST enable/disable, snapshot failure fallback",
+    "interface/CIDR scan controls and unconfirmed candidate feedback (mock scan only)",
+    "revoked session gate, re-login, logout and evidence access denial"
+  ],
+  "page_errors": [],
+  "scope": "isolated fake engine/media; scan mocked; no real video or public deployment"
+}

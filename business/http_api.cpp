@@ -1,4 +1,5 @@
 #include "http_api.h"
+#include "event_service.h"
 
 #include <httplib.h>
 
@@ -837,6 +838,13 @@ void HttpApi::register_routes() {
         data["total"] = static_cast<int>(items.size());
         data["items"] = items;
         reply_data(res, data);
+    }));
+
+    // Event details use the same authentication policy as the existing list.
+    svr_->Get(R"(/api/events/(\d+))", auth_wrap([this](const httplib::Request& req,
+                                                               httplib::Response& res) {
+        const auto result = EventService(*d_.db).detail(parse_id(req.matches[1].str()));
+        reply(res, result.code, result.message, &result.data);
     }));
 
     // ---- 9. GET /api/events ----

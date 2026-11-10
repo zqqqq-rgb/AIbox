@@ -6,6 +6,19 @@ afterEach(() => vi.unstubAllGlobals());
 function reply(value) {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ json: async () => value }));
 }
+describe('event detail', () => {
+    it('queries the event ID independently of its camera and preserves source fields', async () => {
+        const detail = { id: 12, camera_id: 3, task_id: 7, rule_id: 6, targets: [], targets_valid: true };
+        reply({ code: 0, data: detail });
+        expect(await api.getEvent(12)).toEqual(detail);
+        expect(fetch.mock.calls[0][0]).toBe('/api/events/12');
+        expect(fetch.mock.calls[0][1].method).toBe('GET');
+    });
+    it('preserves a missing-event error for the detail dialog', async () => {
+        reply({ code: 1002, msg: 'event not found' });
+        await expect(api.getEvent(12, { silent: true })).rejects.toMatchObject({ code: 1002 });
+    });
+});
 describe('durable configuration responses', () => {
     it('retains accepted multi-camera task operations while confirmation is pending', async () => {
         const data = { accepted: true, pending: true, revision: 2, applied: false, operations: [{ camera_id: 1, operation_id: 'cfg-1' }] };
@@ -41,6 +54,14 @@ describe('durable configuration responses', () => {
 });
 
 describe('session authentication', () => {
+    it('requires a browser cookie even when a legacy localStorage token is present', async () => {
+        vi.stubGlobal('localStorage', { getItem: () => 'legacy-valid-token' });
+        reply({ code: 0, data: { auth_required: true, authenticated: false } });
+        await api.authStatus();
+        expect(fetch.mock.calls[0][1].headers.Authorization).toBeUndefined();
+        await api.listCameras();
+        expect(fetch.mock.calls[1][1].headers.Authorization).toBe('Bearer legacy-valid-token');
+    });
     it('explains a missing auth endpoint as a backend version mismatch', async () => {
         const json = vi.fn();
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 404, json }));

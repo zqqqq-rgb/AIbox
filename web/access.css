@@ -3,4 +3,9 @@
 .access-card label{display:grid;gap:8px}.access-card input{width:100%;min-height:42px}
 .access-card .warn-txt{min-height:1.5em}.scan-controls{display:flex;gap:12px;flex-wrap:wrap;align-items:end;margin-bottom:12px}
 .scan-controls label{display:grid;gap:5px;flex:1;min-width:180px}.scan-summary{margin:10px 0}
+.scan-controls input,.scan-controls select,.access-card input{min-height:36px;padding:7px 10px;color:var(--txt);background:var(--bg);border:1px solid var(--line2);border-radius:var(--r)}
+.scan-controls input:focus,.scan-controls select:focus,.access-card input:focus{outline:1px solid var(--acc);outline-offset:1px}
 [hidden]{display:none!important}
+.event-detail-fields{display:grid;grid-template-columns:110px minmax(0,1fr);gap:7px 12px;margin-bottom:16px}
+.event-detail-fields dd{margin:0;overflow-wrap:anywhere}.event-detail-snapshot{max-width:100%;margin-top:12px}
+.ev-row>.btn{margin-left:auto}

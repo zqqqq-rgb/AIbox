@@ -133,6 +133,10 @@ add_executable(test_http_api test_http_api.cpp)
 target_link_libraries(test_http_api PRIVATE aibox_business)
 add_test(NAME http_api COMMAND test_http_api)
 
+add_executable(test_event_detail test_event_detail.cpp)
+target_link_libraries(test_event_detail PRIVATE aibox_business)
+add_test(NAME event_detail COMMAND test_event_detail)
+
 add_executable(test_ws_hub test_ws_hub.cpp)
 target_link_libraries(test_ws_hub PRIVATE aibox_business)
 add_test(NAME ws_hub COMMAND test_ws_hub)

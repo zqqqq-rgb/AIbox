@@ -1,0 +1,13 @@
+{
+  "checks": [
+    "list button fetches persisted event ID and displays live API source and targets",
+    "query failure stays in dialog; retry recovers; Close and Escape dismiss",
+    "closing an in-flight query does not reopen the dialog"
+  ],
+  "page_errors": [],
+  "event_id": 12,
+  "camera_id": 3,
+  "task_id": 7,
+  "rule_id": 6,
+  "detail_request_count": 4
+}

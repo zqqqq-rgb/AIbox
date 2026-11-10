@@ -89,7 +89,7 @@ void run() {
     CHECK(json(result->body)["data"]["auth_required"].asBool());
     CHECK(!json(result->body)["data"]["authenticated"].asBool());
     result = client.Get("/"); REQUIRE(result); CHECK(result->status == 200);
-    for (const char* path : {"/api/system/info", "/api/auth/check", "/recordings/proof.mp4", "/api/cameras/1/snapshot"}) {
+    for (const char* path : {"/api/system/info", "/api/auth/check", "/api/events/1", "/recordings/proof.mp4", "/api/cameras/1/snapshot"}) {
         result = client.Get(path); REQUIRE(result); CHECK(result->status == 401);
     }
     result = client.Post("/api/auth/login", "{\"token\":\"wrong\"}", "application/json"); REQUIRE(result); CHECK(result->status == 401);
@@ -133,5 +133,6 @@ void run() {
 }
 int main() {
     try { run(); } catch (const std::exception& error) { fprintf(stderr, "remote_access: %s\n", error.what()); return 1; }
-    if (!g_fail) printf("remote_access PASSED\n"); return g_fail;
+    if (!g_fail) printf("remote_access PASSED\n");
+    return g_fail;
 }

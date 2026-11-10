@@ -38,12 +38,12 @@ export function setToken(t) {
     catch (_) { /* node/隐私模式 */ }
 }
 
-async function request(method, path, body, { silent = false, timeout = TIMEOUT_MS, authEvent = true } = {}) {
+async function request(method, path, body, { silent = false, timeout = TIMEOUT_MS, authEvent = true, withBearer = true } = {}) {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), timeout);
     const headers = { 'Content-Type': 'application/json' };
     const tk = getToken();
-    if (tk) headers['Authorization'] = `Bearer ${tk}`;
+    if (tk && withBearer) headers['Authorization'] = `Bearer ${tk}`;
     let j;
     try {
         const res = await fetch(path, {
@@ -123,11 +123,12 @@ export const api = {
     rollbackAlgo: (id) => request('POST', `/api/algorithms/${id}/rollback`, undefined, { silent: true }),
     // 事件 / 录像（from/to 单位均为 ms——db 层 start_ts=ZLM 秒×1000，events.ts=ms）
     listEvents: (q, opt) => request('GET', '/api/events?' + new URLSearchParams(q), undefined, opt),
+    getEvent: (id, opt) => request('GET', `/api/events/${encodeURIComponent(id)}`, undefined, opt),
     listRecordings: (q) => request('GET', '/api/recordings?' + new URLSearchParams(q)),
     // 系统
     getResources: (opt) => request('GET', '/api/resources', undefined, opt),
     systemInfo: (opt) => request('GET', '/api/system/info', undefined, opt),
-    authStatus: () => request('GET', '/api/auth/status', undefined, { silent: true, authEvent: false }),
-    login: (token) => request('POST', '/api/auth/login', { token }, { silent: true, authEvent: false }),
-    logout: () => request('POST', '/api/auth/logout', {}, { silent: true, authEvent: false }),
+    authStatus: () => request('GET', '/api/auth/status', undefined, { silent: true, authEvent: false, withBearer: false }),
+    login: (token) => request('POST', '/api/auth/login', { token }, { silent: true, authEvent: false, withBearer: false }),
+    logout: () => request('POST', '/api/auth/logout', {}, { silent: true, authEvent: false, withBearer: false }),
 };

@@ -327,6 +327,24 @@ void test_events() {
     const Json::Value arr = parse_json(res->body)["data"];
     CHECK(arr.size() == 1 && arr[0]["type"].asString() == "REGION_IN");
     CHECK(arr[0]["targets"][0]["cls"].asInt() == 0);  // targets_json 反序列化
+    const auto event_id = arr[0]["id"].asInt64();
+    // Historical queries must work with the engine offline and issue no commands.
+    r.uds->stop();
+    const auto commands = r.eng.commands();
+    res = cli.Get(("/api/events/" + std::to_string(event_id)).c_str());
+    CHECK(res && res->status == 200);
+    if (res) {
+        const auto detail = parse_json(res->body);
+        CHECK(detail["code"].asInt() == 0 && detail["data"]["id"].asInt64() == event_id);
+        CHECK(detail["data"]["targets"][0]["cls"].asInt() == 0);
+        CHECK(detail["data"]["task_id"].asInt64() == 0);
+    }
+    for (const auto* path : {"/api/events/0", "/api/events/999999999999999999999999999"}) {
+        res = cli.Get(path); CHECK(res && parse_json(res->body)["code"].asInt() == 1001);
+    }
+    res = cli.Get("/api/events/999999"); CHECK(res && parse_json(res->body)["code"].asInt() == 1002);
+    res = cli.Get("/api/events/not-an-id"); CHECK(res && res->status == 404);
+    CHECK(r.eng.commands() == commands);
 }
 
 // ---- 10. resources（get_metrics 透传）----

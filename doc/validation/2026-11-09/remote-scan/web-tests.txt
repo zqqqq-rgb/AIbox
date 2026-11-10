@@ -1,0 +1,18 @@
+
+> test
+> vitest run
+
+
+ RUN  v2.1.9 /workspace/web
+
+ ✓ tests/connection_model.test.js (7 tests) 9ms
+ ✓ tests/overlay_core.test.js (21 tests) 14ms
+ ✓ tests/task_model.test.js (11 tests) 19ms
+ ✓ tests/api.test.js (12 tests) 19ms
+ ✓ tests/modules.test.js (2 tests) 207ms
+
+ Test Files  5 passed (5)
+      Tests  53 passed (53)
+   Start at  07:06:36
+   Duration  856ms (transform 577ms, setup 0ms, collect 720ms, tests 268ms, environment 1ms, prepare 693ms)
+
