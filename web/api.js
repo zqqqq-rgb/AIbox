@@ -57,7 +57,15 @@ async function request(method, path, body, { silent = false, timeout = TIMEOUT_M
                 window.dispatchEvent(new Event('aibox-auth-required'));
             throw new ApiError(res.status, res.status === 401 ? '请登录后继续操作' : '当前请求未获授权');
         }
-        j = await res.json();
+        if (res.status === 404 && path === '/api/auth/status')
+            throw new ApiError(404, '页面与后端版本不一致，请重新编译并重启 AIBox 服务');
+        try {
+            j = await res.json();
+        } catch (_) {
+            const message = `服务返回了非 JSON 响应${res.status ? `（HTTP ${res.status}）` : ''}，请检查服务状态`;
+            if (!silent) toast(message, 'err');
+            throw new ApiError(5001, message);
+        }
     } catch (e) {
         if (e instanceof ApiError) throw e;
         if (!silent) toast(`请求失败：${path}`, 'err');

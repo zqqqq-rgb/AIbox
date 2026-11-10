@@ -41,6 +41,16 @@ describe('durable configuration responses', () => {
 });
 
 describe('session authentication', () => {
+    it('explains a missing auth endpoint as a backend version mismatch', async () => {
+        const json = vi.fn();
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 404, json }));
+        await expect(api.authStatus()).rejects.toMatchObject({ code: 404, message: expect.stringContaining('版本不一致') });
+        expect(json).not.toHaveBeenCalled();
+    });
+    it('reports empty or non-JSON responses without leaking a JSON parser exception', async () => {
+        vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 502, json: async () => { throw new SyntaxError('Unexpected end of JSON input'); } }));
+        await expect(api.systemInfo({ silent: true })).rejects.toMatchObject({ code: 5001, message: expect.stringContaining('HTTP 502') });
+    });
     it('classifies expired sessions before trying to parse an HTML proxy response', async () => {
         const json = vi.fn();
         vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ status: 401, json }));
