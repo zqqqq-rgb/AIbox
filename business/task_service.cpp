@@ -47,6 +47,40 @@ TaskResult fail(int code, const std::string& message) {
 bool supported(const std::string& cap) {
     return cap == "region_in" || cap == "dwell";
 }
+Json::Value finding(const char* status, const std::string& code, const char* reason, const char* next = "") {
+    Json::Value value;
+    value["status"] = status;
+    value["reason_code"] = code;
+    value["reason"] = reason;
+    value["next_step"] = next;
+    return value;
+}
+Json::Value engine_issue(const EngineObservation& engine) {
+    if (engine.state == "online") return {};
+    if (engine.state == "engine_offline")
+        return finding("blocked", engine.state, "引擎未连接。", "检查引擎服务，连接恢复后重新诊断。");
+    if (engine.state == "engine_syncing")
+        return finding("waiting", engine.state, "引擎正在恢复摄像头配置。", "等待同步完成后重新诊断。");
+    if (engine.state == "engine_declaration_missing")
+        return finding("blocked", engine.state, "当前引擎未声明模型和配置版本诊断能力。", "升级引擎后重新诊断。");
+    if (engine.state == "engine_query_failed")
+        return finding("blocked", engine.state, "暂时无法读取引擎状态。", "稍后重新诊断。如果仍失败，检查引擎连接。");
+    return finding("blocked", engine.state, "任务执行器未启动。", "检查业务服务的启动状态。");
+}
+bool supports_type(const Json::Value& types, const std::string& type) {
+    return types.isArray() && std::any_of(types.begin(), types.end(),
+        [&](const Json::Value& value) { return value.isString() && value.asString() == type; });
+}
+Json::Value model_readiness(const Json::Value& model, const std::string& type) {
+    if (model.isNull())
+        return finding("blocked", "model_missing", "引擎未加载此算法模型。", "安装并加载对应算法包。");
+    if (model["disabled"] != false)
+        return finding("blocked", "model_unavailable", "算法模型未通过加载或自检。", "检查算法包和引擎加载日志。");
+    if (model["v2_threshold_supported"] != true ||
+        (!type.empty() && !supports_type(model["rule_types"], type)))
+        return finding("blocked", "model_rule_unsupported", "模型不支持此任务所需的规则或独立阈值。", "选择支持该规则的算法模型。");
+    return finding("available", "model_ready", "模型支持此任务所需的配置。");
+}
 bool decode_draft(const Json::Value& body, AlgorithmTask& task, std::string& error) {
     auto bad = [&](const char* text) {
         error = text;
@@ -154,22 +188,45 @@ bool decode_draft(const Json::Value& body, AlgorithmTask& task, std::string& err
 }
 } // namespace
 Json::Value TaskService::capabilities() {
+    const auto engine = runtime_ ? runtime_->observe_engine() : EngineObservation{};
+    const auto blocked = engine_issue(engine);
+    const auto& models = engine.capabilities["models"];
     Json::Value rows(Json::arrayValue);
     for (const auto& c : db_.list_capabilities()) {
         Json::Value value;
+        Json::Value model_rows(Json::arrayValue);
+        const bool implemented = supported(c.rule_type);
+        if (!implemented) {
+            const bool calibration = c.rule_type == "speed" || c.rule_type == "ref_geom";
+            value = finding("unsupported", "rule_not_implemented",
+                            calibration ? "此规则需要引擎规则和场景标定支持，当前版本尚未开放。"
+                                        : "当前版本尚未支持此规则。");
+        } else if (!blocked.isNull()) {
+            value = blocked;
+            value["status"] = "blocked";
+        } else if (!supports_type(engine.capabilities["rule_types"], c.rule_type)) {
+            value = finding("blocked", "engine_rule_unsupported", "当前引擎未声明此规则。", "检查引擎版本与规则支持范围。");
+        } else {
+            bool ready = false;
+            if (models.isArray()) for (const auto& model : models) {
+                if (!model.isObject() || !model["algo_id"].isString()) continue;
+                auto item = model_readiness(model, c.rule_type);
+                item["algo_id"] = model["algo_id"];
+                if (model["version"].isString()) item["version"] = model["version"];
+                ready = ready || item["status"] == "available";
+                model_rows.append(item);
+            }
+            value = ready ? finding("available", "compatible_model_ready", "当前引擎与已加载模型支持此规则。")
+                          : finding("blocked", "compatible_model_missing", "当前没有可用的兼容模型。", "加载支持此规则的算法包。");
+        }
         value["id"] = c.id;
         value["name"] = c.name;
         value["rule_type"] = c.rule_type;
         value["version"] = c.version;
-        value["draft_supported"] = supported(c.rule_type);
-        value["runtime_supported"] = supported(c.rule_type) && runtime_;
-        value["status"] =
-            supported(c.rule_type) ? (runtime_ ? "available" : "blocked") : "unsupported";
-        value["reason"] =
-            supported(c.rule_type)
-                ? (runtime_ ? "activation requires engine capability and peak resource admission"
-                            : "runtime executor not attached")
-                : "rule implementation not validated";
+        value["draft_supported"] = implemented;
+        value["runtime_supported"] = value["status"] == "available";
+        value["models"] = model_rows;
+        value["simulation"] = engine.capabilities["simulation"];
         rows.append(value);
     }
     return rows;
@@ -309,6 +366,152 @@ TaskResult TaskService::get(int64_t id) {
     if (!db_.get_task(id, task) || task.deleted_at)
         return fail(1002, "task not found");
     return {0, "ok", describe(task)};
+}
+TaskResult TaskService::diagnostics(int64_t id) {
+    AlgorithmTask task;
+    if (!db_.get_task(id, task) || task.deleted_at) return fail(1002, "task not found");
+    if (task.kind != "v2") return fail(1003, "use camera configuration for legacy tasks");
+
+    const auto engine = runtime_ ? runtime_->observe_engine() : EngineObservation{};
+    // Collect DB observations together, without holding a database lock during IPC.
+    Db::Txn read(db_);
+    if (!read.active()) return fail(5001, "cannot read task diagnostics");
+    if (!db_.get_task(id, task) || task.deleted_at) return fail(1002, "task not found");
+    const auto view = describe(task);
+    const auto unavailable = engine_issue(engine);
+    const auto& models = engine.capabilities["models"];
+    const auto& revisions = engine.capabilities["configuration_revisions"];
+    const auto& frame_states = engine.capabilities["camera_frames"];
+    const bool version_readback = engine.capabilities["configuration_revision_ack"] == true && revisions.isObject();
+    const bool has_enabled_models = std::any_of(task.algorithms.begin(), task.algorithms.end(),
+        [](const TaskAlgorithm& algorithm) { return algorithm.enabled; });
+
+    Json::Value data, model_issues(Json::arrayValue), cameras(Json::arrayValue);
+    data["task_id"] = Json::Int64(id);
+    data["task_revision"] = Json::Int64(task.revision);
+    data["engine_state"] = engine.state;
+    data["simulation"] = engine.capabilities["simulation"];
+    data["schedule_active"] = view["schedule_active"];
+    data["observed_at"] = Json::Int64(task_now_ms());
+
+    if (unavailable.isNull()) {
+        for (const auto& algorithm : task.algorithms) {
+            if (!algorithm.enabled) continue;
+            Json::Value model;
+            if (models.isArray()) for (const auto& item : models) {
+                if (item.isObject() && item["algo_id"] == algorithm.algo_id) { model = item; break; }
+            }
+            auto readiness = model_readiness(model, "");
+            if (readiness["status"] != "available") {
+                readiness["algo_id"] = algorithm.algo_id;
+                model_issues.append(readiness);
+                continue;
+            }
+            for (const auto& rule : task.rules) {
+                if (!rule.enabled || rule.algo_id != algorithm.algo_id) continue;
+                if (!supported(rule.capability_id)) {
+                    readiness = finding("unsupported", "rule_not_implemented", "当前版本尚未支持此规则。", "更换为已支持的规则。");
+                } else if (!supports_type(engine.capabilities["rule_types"], rule.capability_id)) {
+                    readiness = finding("blocked", "engine_rule_unsupported", "当前引擎未声明此规则。", "检查引擎版本与规则支持范围。");
+                } else {
+                    readiness = model_readiness(model, rule.capability_id);
+                }
+                if (readiness["status"] == "available") continue;
+                readiness["algo_id"] = algorithm.algo_id;
+                readiness["rule_key"] = rule.key;
+                model_issues.append(readiness);
+            }
+        }
+    }
+
+    std::map<int64_t, Json::Value> deployments;
+    for (const auto& deployment : view["deployments"])
+        deployments.emplace(deployment["camera_id"].asInt64(), deployment);
+    unsigned ready = 0;
+    Json::Value first_blocked, first_waiting, first_inactive;
+    for (const auto camera_id : task.camera_ids) {
+        CameraRow camera;
+        CameraConfigState config;
+        ConfigOperationRow operation;
+        const bool known = db_.get_camera(camera_id, camera) && db_.get_camera_config_state(camera_id, config);
+        const bool have_operation = known && db_.get_current_config_operation(camera_id, operation);
+        const auto deployment = deployments.find(camera_id);
+        const bool confirmed = deployment != deployments.end() &&
+            deployment->second["task_revision"].asInt64() == task.revision && deployment->second["applied"].asBool();
+        const auto revision_key = std::to_string(camera_id);
+        const auto engine_revision = version_readback ? revisions[revision_key] : Json::Value();
+        const auto frames = frame_states.isObject() ? frame_states[revision_key] : Json::Value();
+        const bool matches = engine_revision.isInt64() && config.desired_revision > 0 &&
+            engine_revision.asInt64() == config.desired_revision;
+        Json::Value row;
+        if (!known || config.deleted_at) {
+            row = finding("blocked", "camera_missing", "关联摄像头已删除或不可用。", "编辑任务，更新关联摄像头。");
+        } else if (!camera.enabled) {
+            row = finding("inactive", "camera_disabled", "摄像头已停用。", "到摄像头页面启用此通道。");
+        } else if (!task.enabled && deployment == deployments.end()) {
+            row = finding("inactive", "task_draft", "任务尚未启用。", "检查配置并启用任务。");
+        } else if (!unavailable.isNull()) {
+            row = unavailable;
+        } else if (config.apply_status == "failed" || config.apply_status == "retry_wait") {
+            const bool retry = config.apply_status == "retry_wait";
+            row = finding(retry ? "waiting" : "blocked", retry ? "configuration_retry" : "configuration_failed",
+                          retry ? "配置执行失败，等待自动重试。" : "配置执行失败。",
+                          "查看执行详情，检查摄像头连接、媒体服务及算法包。");
+        } else if (!confirmed) {
+            row = finding("waiting", "configuration_pending", "当前任务或时间窗的配置尚未确认。", "等待配置执行完成后重新诊断。");
+        } else if (!version_readback) {
+            row = finding("blocked", "configuration_readback_unavailable", "当前引擎未提供配置版本回读。", "检查引擎版本。");
+        } else if (!matches) {
+            row = finding("blocked", "configuration_revision_mismatch", "业务目标与引擎回报的配置版本不一致。", "重新诊断。如果仍不一致，查看引擎同步和执行详情。");
+        } else if (!task.enabled) {
+            row = finding("inactive", "task_disabled", "任务已停用，配置已确认。", "需要检测时启用任务。");
+        } else if (!view["schedule_active"].asBool()) {
+            row = finding("waiting", "waiting_schedule", "当前不在任务的运行时间窗内。", "等待下个运行时间窗，或调整时间计划。");
+        } else if (!has_enabled_models) {
+            row = finding("blocked", "no_enabled_models", "任务中没有启用的算法。", "编辑任务并启用至少一个算法。");
+        } else if (!model_issues.empty()) {
+            row = finding("blocked", "task_model_blocked", "任务所需的模型或规则不可用。", "查看模型与规则诊断并处理阻塞项。");
+        } else if (frames == "awaiting_first_frame") {
+            row = finding("waiting", "camera_awaiting_frame", "配置已确认，等待摄像头首帧。", "检查摄像头与子码流连接。");
+        } else if (frames == "no_recent_frames") {
+            row = finding("blocked", "camera_no_recent_frames", "配置已确认，近期没有解码帧。", "检查摄像头与媒体连接。");
+        } else if (!camera.online) {
+            row = finding("blocked", "camera_offline", "最近一次通道状态为离线。", "检查摄像头及媒体连接。");
+        } else {
+            row = finding("available", "configuration_confirmed", "引擎配置版本与业务目标一致。");
+            ++ready;
+        }
+        if (row["status"] == "blocked" && first_blocked.isNull()) first_blocked = row;
+        if (row["status"] == "waiting" && first_waiting.isNull()) first_waiting = row;
+        if (row["status"] == "inactive" && first_inactive.isNull()) first_inactive = row;
+        row["camera_id"] = Json::Int64(camera_id);
+        row["camera_name"] = camera.name;
+        row["desired_revision"] = Json::Int64(config.desired_revision);
+        row["applied_revision"] = Json::Int64(config.applied_revision);
+        row["engine_revision"] = engine_revision.isInt64() && engine_revision.asInt64() > 0 ? engine_revision : Json::Value();
+        if (have_operation) {
+            auto& info = row["operation"];
+            info["id"] = operation.operation_id;
+            info["status"] = operation.status;
+            info["attempts"] = operation.attempts;
+            info["error_code"] = operation.error_code;
+            info["last_error"] = operation.last_error;
+            info["next_retry_at"] = Json::Int64(operation.next_retry_at);
+        }
+        cameras.append(row);
+    }
+    if (ready && ready == cameras.size())
+        data["summary"] = finding("available", "configuration_confirmed", "所有摄像头的任务配置已核对。");
+    else if (ready)
+        data["summary"] = finding("partial", "partially_ready", "部分摄像头尚未就绪。", "查看各摄像头的诊断结果。");
+    else if (!first_blocked.isNull()) data["summary"] = first_blocked;
+    else if (!first_waiting.isNull()) data["summary"] = first_waiting;
+    else if (!first_inactive.isNull()) data["summary"] = first_inactive;
+    else data["summary"] = finding("blocked", "no_cameras", "任务没有关联摄像头。", "为任务选择至少一台摄像头。");
+    data["cameras"] = cameras;
+    data["model_issues"] = model_issues;
+    if (!read.commit()) return fail(5001, "cannot finish reading task diagnostics");
+    return {0, "ok", data};
 }
 TaskResult TaskService::save(int64_t id, const Json::Value& body) {
     AlgorithmTask task;

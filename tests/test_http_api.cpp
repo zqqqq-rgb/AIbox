@@ -344,6 +344,29 @@ void test_events() {
     }
     res = cli.Get("/api/events/999999"); CHECK(res && parse_json(res->body)["code"].asInt() == 1002);
     res = cli.Get("/api/events/not-an-id"); CHECK(res && res->status == 404);
+    const auto important_path = "/api/events/" + std::to_string(event_id) + "/important";
+    res = cli.Put(important_path.c_str(), R"({"important":true,"revision":0})", "application/json");
+    CHECK(res && parse_json(res->body)["code"].asInt() == 0);
+    CHECK(res && parse_json(res->body)["data"]["important_revision"].asInt64() == 1);
+    res = cli.Get("/api/events?camera_id=1&algo_id=person");
+    CHECK(res && parse_json(res->body)["data"][0]["important"].asBool());
+    res = cli.Get(("/api/events/" + std::to_string(event_id)).c_str());
+    CHECK(res && parse_json(res->body)["data"]["important"].asBool());
+    res = cli.Put(important_path.c_str(), R"({"important":false,"revision":0})", "application/json");
+    CHECK(res && parse_json(res->body)["code"].asInt() == 1003);
+    for (const auto* invalid : {"broken", "null", "[]", R"({"important":1,"revision":1})",
+            R"({"important":false})", R"({"important":false,"revision":1,"extra":0})",
+            R"({"important":false,"revision":1} trailing)",
+            R"({"important":true,"important":false,"revision":1})"}) {
+        res = cli.Put(important_path.c_str(), invalid, "application/json");
+        CHECK(res && parse_json(res->body)["code"].asInt() == 1001);
+    }
+    res = cli.Put("/api/events/999999/important", R"({"important":true,"revision":0})", "application/json");
+    CHECK(res && parse_json(res->body)["code"].asInt() == 1002);
+    res = cli.Put("/api/events/9999999999999999999999/important", R"({"important":true,"revision":0})", "application/json");
+    CHECK(res && parse_json(res->body)["code"].asInt() == 1001);
+    res = cli.Put(important_path.c_str(), R"({"important":false,"revision":1})", "application/json");
+    CHECK(res && parse_json(res->body)["code"].asInt() == 0);
     CHECK(r.eng.commands() == commands);
 }
 

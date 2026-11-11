@@ -4,6 +4,7 @@
 
 #include <chrono>
 #include <filesystem>
+#include <json/json.h>
 #include <utility>
 
 #include "infer/Yolov8Post.h"
@@ -190,6 +191,24 @@ proto::RegistryReadyEvt ModelRegistry::snapshot() const {
         evt.algos.push_back(std::move(a));
     }
     return evt;
+}
+
+std::string ModelRegistry::capabilities_json() const {
+    std::lock_guard<std::mutex> lock(mu_);
+    Json::Value rows(Json::arrayValue);
+    for (const auto& [id, entry] : entries_) {
+        Json::Value row;
+        row["algo_id"] = id; row["version"] = entry.pkg.manifest.version;
+        row["disabled"] = !entry.inst;
+        const bool supported = entry.inst && (!entry.inst->post || entry.inst->post_at_threshold);
+        row["v2_threshold_supported"] = supported;
+        row["reason_code"] = !entry.inst ? "model_unavailable" : supported ? "ready" : "threshold_decoder_unsupported";
+        row["rule_types"] = Json::Value(Json::arrayValue);
+        if (supported) { row["rule_types"].append("region_in"); row["rule_types"].append("dwell"); }
+        rows.append(row);
+    }
+    Json::StreamWriterBuilder writer; writer["indentation"] = "";
+    return Json::writeString(writer, rows);
 }
 
 float ModelRegistry::cost_ms_of(const std::string& algo_id) const {

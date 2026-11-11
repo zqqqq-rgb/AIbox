@@ -58,6 +58,8 @@ public:
 
     // registry_ready 事件载荷（启动/热升级/回滚后快照）
     proto::RegistryReadyEvt snapshot() const;
+    // Model-specific runtime readiness, without package paths or raw loader errors.
+    std::string capabilities_json() const;
 
     // NPU 预检（架构 §11.4.3 闸门1）所需的实测口径：Σcost×Σfps（businessd 计算，
     // engine 提供单模型 npu_cost_ms —— manifest 回填值或 selftest 实测，取其大）

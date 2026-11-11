@@ -203,6 +203,8 @@ void UdsClient::handle_line(const std::string& line) {
         // replace 无陈旧性），且 engine 的 on_connect 补发恰好落在 SYNCING
         // 窗口（连接建立即补发，冒烟实证：丢弃则 algorithms 表恒空）
         const bool is_snapshot = (pm.name == "registry_ready");
+        if (is_snapshot)
+            revision_support_epoch_ = pm.registry_ready.configuration_revision_ack ? connection_epoch() : 0;
         if ((state() == State::ONLINE || is_snapshot) && hooks_.on_evt) {
             hooks_.on_evt(pm, line);
         }
@@ -263,8 +265,9 @@ bool UdsClient::wait_ack_here(uint64_t msg_id, proto::Ack& out, int timeout_ms) 
 }
 
 // 跨线程等待（HttpApi 线程）：client 线程 pump 分发 ack 后 notify 唤醒
-proto::Ack UdsClient::request_for(uint64_t msg_id, const std::string& line, int timeout_ms) {
-    const auto expected_epoch = connection_epoch();
+proto::Ack UdsClient::request_for(uint64_t msg_id, const std::string& line, int timeout_ms,
+                                 uint64_t expected_epoch) {
+    if (!expected_epoch) expected_epoch = connection_epoch();
     {
         std::lock_guard<std::mutex> lk(ack_mu_);
         pending_[msg_id] = {};
@@ -315,17 +318,34 @@ proto::Ack UdsClient::add_cam(const proto::AddCam& v) {
 proto::Ack UdsClient::set_algos(const proto::SetAlgos& v) {
     std::lock_guard<std::mutex> lk(cmd_mu_);
     if (!online()) return offline_ack();
+    const auto epoch = connection_epoch();
+    auto request = v;
     if (v.config_version == 2) {
         std::string error;
         if (!proto::validate_v2_config(v,error)) { proto::Ack a; a.ret=1001; a.msg=error; return a; }
+    }
+    if (v.config_version == 2) {
         const auto capability_id = next_msg_id();
-        const auto caps = request_for(capability_id, proto::encode_request(capability_id,proto::GetCapabilities{}),p_.ack_timeout_ms);
-        if (caps.ret!=0 || !caps.has_data || !proto::supports_rule_v2(caps.data)) {
+        const auto caps = request_for(capability_id, proto::encode_request(capability_id,proto::GetCapabilities{}),p_.ack_timeout_ms, epoch);
+        const bool declared = caps.ret == 0 && caps.has_data;
+        if (v.config_version == 2 && (!declared || !proto::supports_rule_v2(caps.data))) {
             proto::Ack a; a.ret=1003; a.msg="engine does not advertise V2 rule support"; return a;
         }
+        if (!declared || !proto::supports_configuration_revisions(caps.data))
+            request.configuration_revision = 0;
+    } else if (!supports_revision_ack()) {
+        request.configuration_revision = 0;
     }
+    if (!online() || connection_epoch() != epoch) return offline_ack();
     const uint64_t mid = next_msg_id();
-    return request_for(mid, proto::encode_request(mid, v), p_.ack_timeout_ms);
+    auto ack = request_for(mid, proto::encode_request(mid, request), p_.ack_timeout_ms, epoch);
+    if (!online() || connection_epoch() != epoch) return offline_ack();
+    if (ack.ret == 0 && request.configuration_revision &&
+        !proto::acknowledges_configuration(ack, request.id, request.configuration_revision)) {
+        ack.ret = 1003;
+        ack.msg = "engine configuration revision acknowledgement did not match";
+    }
+    return ack;
 }
 
 proto::Ack UdsClient::remove_cam(const proto::RemoveCam& v) {
@@ -353,12 +373,18 @@ bool UdsClient::get_metrics(std::string* data_out, int timeout_ms) {
     return true;
 }
 
-bool UdsClient::get_capabilities(std::string* data_out, int timeout_ms) {
-    std::lock_guard<std::mutex> lk(cmd_mu_);
-    if (!online()) return false;
+bool UdsClient::get_capabilities(std::string* data_out, int timeout_ms, bool require_advertisement) {
+    std::unique_lock<std::mutex> lock(cmd_mu_, std::defer_lock);
+    if (require_advertisement) {
+        if (!lock.try_lock()) return false;
+    } else {
+        lock.lock();
+    }
+    const auto epoch = connection_epoch();
+    if (!online() || (require_advertisement && !supports_revision_ack())) return false;
     const auto mid = next_msg_id();
-    auto ack = request_for(mid, proto::encode_request(mid,proto::GetCapabilities{}),timeout_ms);
-    if (ack.ret!=0 || !ack.has_data) return false;
+    auto ack = request_for(mid, proto::encode_request(mid,proto::GetCapabilities{}),timeout_ms, epoch);
+    if (ack.ret != 0 || !ack.has_data || !online() || connection_epoch() != epoch) return false;
     if (data_out) *data_out=std::move(ack.data);
     return true;
 }
@@ -393,7 +419,7 @@ bool UdsClient::do_sync() {
     // 2. 读 DB
     const auto cams = db_.list_cameras(false, true);
     int degraded = 0;
-    bool capabilities_checked=false, supports_v2=false;
+    bool capabilities_checked=false, supports_v2=false, supports_revisions=false;
     // 3. 逐台 add_cam → set_algos（失败重试 ack_retries 次；degraded 继续下一台）
     for (const auto& cam : cams) {
         bool cam_ok = true;
@@ -416,15 +442,17 @@ bool UdsClient::do_sync() {
             if (!db_.request_camera_replay(snapshot)) return false;
             continue;  // Do not silently replace a broken ROI with full-frame detection.
         }
-        if (compiled.algos.config_version==2) {
+        if (compiled.algos.config_version == 2) {
             if(!capabilities_checked) {
                 capabilities_checked=true;
                 const auto mid=next_msg_id(); arm_pending(mid);
                 if(!send_line(proto::encode_request(mid,proto::GetCapabilities{}))) { disarm_pending(mid); return false; }
                 proto::Ack ack;
-                supports_v2=wait_ack_here(mid,ack,p_.ack_timeout_ms) && ack.ret==0 && ack.has_data && proto::supports_rule_v2(ack.data);
+                const bool declared = wait_ack_here(mid,ack,p_.ack_timeout_ms) && ack.ret==0 && ack.has_data;
+                supports_v2 = declared && proto::supports_rule_v2(ack.data);
+                supports_revisions = declared && proto::supports_configuration_revisions(ack.data);
             }
-            if(!supports_v2) {
+            if(compiled.algos.config_version == 2 && !supports_v2) {
                 ++degraded; ++st.set_algos_fail;
                 if(!db_.request_camera_replay(snapshot)) return false;
                 continue;
@@ -460,7 +488,7 @@ bool UdsClient::do_sync() {
             continue;
         }
         const auto& ac = compiled.add;
-        const auto& sa = compiled.algos;
+        auto& sa = compiled.algos;
         bool added = false;
         bool rebuilt = false;
         proto::Ack ack;
@@ -498,6 +526,9 @@ bool UdsClient::do_sync() {
             // 详设 §5.2 丢弃（防旧事件），但本台 add 刚 ack 成功是权威事实——
             // 若依赖事件，ONLINE 后再无 camera_status，online 恒 0（冒烟实证）
             db_.set_camera_online(cam.id, true);
+            if ((supports_revision_ack() || (sa.config_version == 2 && supports_revisions)) &&
+                config_state.desired_revision > 0)
+                sa.configuration_revision = static_cast<uint64_t>(config_state.desired_revision);
             bool applied = false;
             for (int attempt = 0; attempt <= p_.ack_retries && !applied; ++attempt) {
                 const uint64_t mid = next_msg_id();
@@ -506,7 +537,9 @@ bool UdsClient::do_sync() {
                     disarm_pending(mid);
                     return false;
                 }
-                if (wait_ack_here(mid, ack, p_.ack_timeout_ms) && ack.ret == 0) applied = true;
+                if (wait_ack_here(mid, ack, p_.ack_timeout_ms) && ack.ret == 0 &&
+                    (!sa.configuration_revision || proto::acknowledges_configuration(ack, sa.id, sa.configuration_revision)))
+                    applied = true;
             }
             if (applied) ++st.set_algos_ok; else ++st.set_algos_fail;
             if (!applied || !db_.confirm_camera_replay(cam.id, config_state.desired_revision,

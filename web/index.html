@@ -246,6 +246,13 @@
     .task-section { border: 1px solid var(--line2); background: var(--panel2); padding: 12px; margin: 10px 0; }
     .task-region { width: 100%; max-width: 480px; background: #0c1520; border: 1px solid var(--line2); cursor: crosshair; }
     .task-operation { border-top: 1px solid var(--line2); padding: 8px 0; display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+    .task-capabilities { margin-top: 12px; }
+    .task-capabilities summary { cursor: pointer; }
+    .task-capabilities .btn { margin-top: 8px; }
+    .task-capability-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 250px), 1fr)); gap: 10px; }
+    .task-diagnostic-report { padding: 12px 0; }
+    .task-diagnostic-row { border-top: 1px solid var(--line2); padding: 8px 0; overflow-wrap: anywhere; }
+    .task-diagnostic-row p, .task-diagnostic-report > p { margin: 4px 0; }
     .task-layout fieldset { border: 0; padding: 0; min-width: 0; }
     .task-layout fieldset:disabled { opacity: .6; }
     @media(max-width: 1000px) { .task-layout { grid-template-columns: 1fr; } }

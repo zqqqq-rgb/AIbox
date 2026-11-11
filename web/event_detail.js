@@ -2,7 +2,7 @@ import { api } from './api.js';
 import { h, fmtMs } from './ui.js';
 
 // Fetch the persisted event by its local event ID, never by camera ID.
-export function showEventDetail(id, { cameraName = {}, classesOf = {} } = {}) {
+export function showEventDetail(id, { cameraName = {}, classesOf = {}, onUpdated = () => {} } = {}) {
     const root = document.getElementById('modal-root');
     const previousFocus = document.activeElement;
     const mask = h('div', 'mask');
@@ -39,9 +39,42 @@ export function showEventDetail(id, { cameraName = {}, classesOf = {} } = {}) {
                 ['任务 ID', detail.task_id || '历史事件未记录'], ['规则 ID', detail.rule_id || '历史事件未记录'],
                 ['任务版本', detail.task_revision || '—'], ['规则版本', detail.rule_version || '—'],
                 ['上报标记', detail.reported ? '已上报' : '未上报'],
+                ['重要标记', detail.important ? '★ 重要事件' : '普通事件'],
             ];
             for (const [label, value] of items) fields.append(h('dt', 'dim', label), h('dd', 'mono', String(value ?? '—')));
             body.append(fields);
+            const importanceValue = fields.lastElementChild;
+            const importantButton = h('button', 'btn btn-acc');
+            const importantStatus = h('p', 'small'); importantStatus.setAttribute('role', 'status');
+            const reloadButton = h('button', 'btn', '重新加载详情'); reloadButton.hidden = true;
+            reloadButton.onclick = load;
+            function updateImportance() {
+                importanceValue.textContent = detail.important ? '★ 重要事件' : '普通事件';
+                importantButton.textContent = detail.important ? '取消重要' : '标记重要';
+                importantButton.disabled = !Number.isSafeInteger(detail.important_revision);
+                onUpdated(detail);
+            }
+            updateImportance();
+            importantButton.onclick = async () => {
+                importantButton.disabled = true;
+                importantButton.textContent = '正在保存…';
+                importantStatus.textContent = '';
+                try {
+                    const result = await api.setEventImportant(id, !detail.important, detail.important_revision, { silent: true });
+                    Object.assign(detail, result);
+                    if (!alive) { onUpdated(detail); return; }
+                    updateImportance();
+                    importantStatus.textContent = detail.important ? '已标记为重要事件' : '已取消重要标记';
+                } catch (failure) {
+                    if (!alive) return;
+                    importantButton.textContent = '保存未完成';
+                    importantStatus.textContent = failure.code === 1003
+                        ? '其他页面已修改标记，请重新加载详情后再操作。'
+                        : `保存未确认，请重新加载详情核对：${failure.message}`;
+                    reloadButton.hidden = false;
+                }
+            };
+            body.append(importantButton, reloadButton, importantStatus);
             const targets = Array.isArray(detail.targets) ? detail.targets : [];
             body.append(h('h3', '', `检测目标（${targets.length}）`));
             if (detail.targets_valid === false) body.append(h('p', 'warn-txt', '历史目标数据无法解析，事件基本信息仍可查看。'));

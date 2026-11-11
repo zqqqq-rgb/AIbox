@@ -1,0 +1,13 @@
+{
+  "checks": [
+    "real UI write updates list badge and survives page reload; detection data unchanged",
+    "stale second page is rejected; reload then cancellation persists",
+    "save failure shows no success and requires reloading authoritative state"
+  ],
+  "page_errors": [],
+  "event_id": 12,
+  "original_important": false,
+  "final_important": false,
+  "original_revision": 0,
+  "final_revision": 2
+}

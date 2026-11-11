@@ -2,6 +2,7 @@
 
 #include "common/Log.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cstring>
 
@@ -58,11 +59,12 @@ void CameraChannel::start() {
     // 次态 RUNNING 由首帧到达触发（src_loop），保持 LOADING 直至那时
 }
 
-void CameraChannel::reconfigure(const std::vector<AlgoCfg>& algos) {
+bool CameraChannel::reconfigure(const std::vector<AlgoCfg>& algos) {
     // 迁移表：RUNNING→RECONFIG→RUNNING。同步执行无 I/O：
     //   drain 本通道 q_ai_（旧算法在途帧全部作废）+ 清 sampler 令牌
-    if (state_.load(std::memory_order_relaxed) != State::RUNNING) return;
-    set_state(State::RECONFIG);
+    State previous = State::RUNNING;
+    const bool mark_reconfig = state_.compare_exchange_strong(previous, State::RECONFIG);
+    if (!mark_reconfig && previous != State::LOADING) return false;
 
     size_t drained = q_ai_.drain();  // drain 内部计 out（这些帧不再进 sink）
     (void)drained;
@@ -76,7 +78,13 @@ void CameraChannel::reconfigure(const std::vector<AlgoCfg>& algos) {
     for (const auto& c : algos)
         if (c.detect_fps > fps) fps = c.detect_fps;
     sampler_.configure(fps);
-    set_state(State::RUNNING);  // drain ≤ 队列深 4，远小于 500ms 预算
+    if (mark_reconfig) set_state(State::RUNNING);
+    return true;
+}
+
+bool CameraChannel::has_recent_frames() const {
+    return m_dec_.in.load(std::memory_order_relaxed) > 0 &&
+        steady_ms() - last_frame_ms_.load(std::memory_order_relaxed) <= p_.watchdog_timeout_ms;
 }
 
 void CameraChannel::stop() {
@@ -186,13 +194,14 @@ void CameraChannel::worker_loop() {
 }
 
 void CameraChannel::watchdog_loop() {
+    int64_t last_reconnect_ms = 0;
     while (running_.load(std::memory_order_relaxed)) {
         std::this_thread::sleep_for(std::chrono::milliseconds(p_.watchdog_tick_ms));
         if (!running_.load(std::memory_order_relaxed)) break;
         State s = state_.load(std::memory_order_relaxed);
         if (s != State::RUNNING && s != State::LOADING) continue;
 
-        int64_t last = last_frame_ms_.load(std::memory_order_relaxed);
+        const int64_t last = std::max(last_reconnect_ms, last_frame_ms_.load(std::memory_order_relaxed));
         int64_t now = steady_ms();
         if (now - last > static_cast<int64_t>(p_.watchdog_timeout_ms)) {
             // 迁移表"看门狗超时"行：仅重启拉流，decoder/池/队列保留，状态不降级。
@@ -200,7 +209,7 @@ void CameraChannel::watchdog_loop() {
             // 同时重置计时基准——给重连+首帧一个完整超时窗，否则旧基准会在
             // 重连宽限期内再次触发，形成连环重启（板上实测 opens=3 的根因）
             if (src_) src_->close();
-            last_frame_ms_.store(now, std::memory_order_relaxed);
+            last_reconnect_ms = now;
         }
     }
 }

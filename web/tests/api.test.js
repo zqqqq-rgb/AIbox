@@ -18,6 +18,19 @@ describe('event detail', () => {
         reply({ code: 1002, msg: 'event not found' });
         await expect(api.getEvent(12, { silent: true })).rejects.toMatchObject({ code: 1002 });
     });
+    it('sends the desired importance and the observed revision', async () => {
+        reply({ code: 0, data: { id: 12, important: true, important_revision: 1 } });
+        const result = await api.setEventImportant(12, true, 0);
+        expect(fetch.mock.calls[0][0]).toBe('/api/events/12/important');
+        expect(fetch.mock.calls[0][1].method).toBe('PUT');
+        expect(JSON.parse(fetch.mock.calls[0][1].body)).toEqual({ important: true, revision: 0 });
+        expect(result.important).toBe(true);
+    });
+    it('rejects a stale importance revision and preserves the current state', async () => {
+        const data = { id: 12, important: true, important_revision: 1, changed: false };
+        reply({ code: 1003, msg: 'reload', data });
+        await expect(api.setEventImportant(12, false, 0, { silent: true })).rejects.toMatchObject({ code: 1003, data });
+    });
 });
 describe('durable configuration responses', () => {
     it('retains accepted multi-camera task operations while confirmation is pending', async () => {

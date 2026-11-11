@@ -169,6 +169,14 @@ const char* kMigrationV8 =
     "task_revision INTEGER NOT NULL, target_revision INTEGER NOT NULL,"
     "operation_id TEXT NOT NULL REFERENCES config_operations(operation_id), PRIMARY KEY(task_id,camera_id));";
 
+const char* kMigrationV9 =
+    "ALTER TABLE events ADD COLUMN important INTEGER NOT NULL DEFAULT 0 CHECK(important IN (0,1));"
+    "ALTER TABLE events ADD COLUMN important_revision INTEGER NOT NULL DEFAULT 0 CHECK(important_revision>=0);"
+    "CREATE TABLE event_importance_history("
+    "event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,"
+    "revision INTEGER NOT NULL CHECK(revision>0), important INTEGER NOT NULL CHECK(important IN (0,1)),"
+    "changed_at INTEGER NOT NULL, PRIMARY KEY(event_id,revision));";
+
 }  // namespace
 
 // ---- open / migrate ----
@@ -219,7 +227,7 @@ int Db::migrate() {
     if (cur >= kLatestVersion) return cur;  // 幂等：已是最新，零副作用
 
     static const char* const kMigrations[] = {kMigrationV1, kMigrationV2,
-                                              kMigrationV3, kMigrationV4, kMigrationV5, kMigrationV6, kMigrationV7, kMigrationV8};
+                                              kMigrationV3, kMigrationV4, kMigrationV5, kMigrationV6, kMigrationV7, kMigrationV8, kMigrationV9};
     for (int v = cur + 1; v <= kLatestVersion; ++v) {
         Txn t(*this);
         if (!t.active()) return -1;
@@ -281,12 +289,12 @@ int Db::changes() const {
 
 // ---- Txn ----
 
-Db::Txn::Txn(Db& d) : db_(d), lock_(d.mu_) {
+Db::Txn::Txn(Db& d, Mode mode) : db_(d), lock_(d.mu_) {
     if (db_.db_ && !sqlite3_get_autocommit(db_.db_)) {
         db_.err_ = "nested transactions are not supported";
         return;
     }
-    active_ = db_.exec("BEGIN;");
+    active_ = db_.exec(mode == Mode::Immediate ? "BEGIN IMMEDIATE;" : "BEGIN;");
 }
 
 Db::Txn::~Txn() {
@@ -956,7 +964,7 @@ std::vector<EventRow> Db::list_events(int64_t camera_id, const std::string& algo
     // 条件过滤缺席时 LIMIT ?5 与实际绑定序错位（板上实测踩中：LIMIT 落 NULL）
     std::string sql =
         "SELECT e.id, camera_id, algo_id, type, ts, snapshot_path, targets_json, reported, "
-        "s.task_id, s.rule_id, s.task_revision, s.rule_version "
+        "s.task_id, s.rule_id, s.task_revision, s.rule_version, e.important, e.important_revision "
         "FROM events e LEFT JOIN event_rule_sources s ON s.event_id=e.id WHERE 1=1";
     if (camera_id > 0) sql += " AND camera_id=?";
     if (!algo_id.empty()) sql += " AND algo_id=?";
@@ -983,6 +991,7 @@ std::vector<EventRow> Db::list_events(int64_t camera_id, const std::string& algo
         r.reported = st->i64(7) != 0;
         r.task_id = st->i64(8); r.rule_id = st->i64(9);
         r.task_revision = st->i64(10); r.rule_version = st->i64(11);
+        r.important = st->i64(12) != 0; r.important_revision = st->i64(13);
         rows.push_back(std::move(r));
     }
     return rows;

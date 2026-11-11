@@ -11,6 +11,27 @@
 
 namespace aibox {
 namespace biz {
+EngineObservation CameraService::observe_engine() {
+    if (!running_) return {};
+    if (uds_.state() == UdsClient::State::SYNCING) return {"engine_syncing", {}};
+    if (!uds_.online()) return {"engine_offline", {}};
+    const auto epoch = uds_.connection_epoch();
+    // Old peers can close the connection on unknown commands. Probe only after advertisement.
+    if (!uds_.supports_revision_ack()) return {"engine_declaration_missing", {}};
+    std::string text;
+    if (!uds_.get_capabilities(&text, 300, true) || !runtime_online() || uds_.connection_epoch() != epoch)
+        return {"engine_query_failed", {}};
+    Json::CharReaderBuilder builder;
+    builder["failIfExtra"] = true;
+    auto reader = std::unique_ptr<Json::CharReader>(builder.newCharReader());
+    Json::Value capabilities;
+    std::string error;
+    if (!reader->parse(text.data(), text.data() + text.size(), &capabilities, &error) ||
+        !capabilities.isObject())
+        return {"engine_query_failed", {}};
+    return {"online", std::move(capabilities)};
+}
+
 namespace {
 std::string operation_id() {
     static std::atomic<uint64_t> sequence{0};

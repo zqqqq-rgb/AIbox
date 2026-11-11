@@ -29,6 +29,7 @@
 #include <vector>
 
 #include <json/json.h>
+#include <sstream>
 
 #include "arbiter/DegradeController.h"
 #include "common/DmaBuffer.h"
@@ -206,10 +207,17 @@ struct App : NonCopyable {
     std::mutex mu; // 保护 chans / chan_algos / algo_core 三个 map（冷路径 + 轻量读）
     std::map<uint32_t, std::unique_ptr<CameraChannel>> chans;
     std::map<uint32_t, std::vector<CameraChannel::AlgoCfg>> chan_algos;
+    std::map<uint32_t, uint64_t> configuration_revisions;
     std::map<std::string, std::string> algo_core; // algo_id → "steady"|"triggered"
 
     std::mutex met_mu; // 保护 last_metrics（get_metrics 读）
     MetricsSnapshot last_metrics;
+
+    void emit_registry() {
+        auto snapshot = registry.snapshot();
+        snapshot.configuration_revision_ack = true;
+        uds.emit(proto::encode_event(snapshot), 0);
+    }
 
     App(Args a, ModelRegistry::RegistryDeps deps)
         : args(std::move(a)), registry(args.packages, std::move(deps)), uds(args.uds_idle_ms),
@@ -577,6 +585,7 @@ void register_handlers(App& app) {
             ch = std::move(it->second);
             app.chans.erase(it);
             app.chan_algos.erase(m.remove_cam.id);
+            app.configuration_revisions.erase(m.remove_cam.id);
             app.runtime.remove(m.remove_cam.id);
         }
         ch->stop(); // 锁外：join 线程 + drain 队列（fd 归还池）
@@ -618,7 +627,6 @@ void register_handlers(App& app) {
             cfgs.push_back(std::move(c));
         }
 
-        CameraChannel* ch = nullptr;
         {
             std::lock_guard<std::mutex> lk(app.mu);
             auto it = app.chans.find(s.id);
@@ -627,7 +635,11 @@ void register_handlers(App& app) {
                 a.msg = "cam not found";
                 return a;
             }
-            ch = it->second.get();
+            if (!it->second->reconfigure(cfgs)) {
+                a.ret = 1003;
+                a.msg = "camera channel cannot accept configuration";
+                return a;
+            }
             if (!app.runtime.configure(s)) {
                 a.ret = 1001;
                 a.msg = "invalid rule configuration";
@@ -635,17 +647,45 @@ void register_handlers(App& app) {
             }
             app.chan_algos[s.id] = cfgs; // 全量替换
         }
-        ch->reconfigure(cfgs); // 迁移表 RECONFIG（drain + 换表，同步 <500ms）
         app.sched.set_channel_fps(s.id, max_fps);
         recompute_weights(app);
+        {
+            std::lock_guard<std::mutex> lock(app.mu);
+            app.configuration_revisions[s.id] = s.configuration_revision;
+        }
+        if (s.configuration_revision) {
+            Json::Value data;
+            data["camera_id"] = s.id;
+            data["configuration_revision"] = Json::UInt64(s.configuration_revision);
+            Json::StreamWriterBuilder writer;
+            a.has_data = true; a.data = Json::writeString(writer, data);
+        }
         return a;
     };
     app.uds.on_cmd("set_algos", apply_config);
     app.uds.on_cmd("set_rules_v2", apply_config);
-    app.uds.on_cmd("get_capabilities", [](const proto::ParsedMsg&) -> proto::Ack {
+    app.uds.on_cmd("get_capabilities", [&app](const proto::ParsedMsg&) -> proto::Ack {
         proto::Ack a;
         a.has_data = true;
-        a.data = proto::engine_capabilities_json();
+        Json::Value data, models; Json::CharReaderBuilder reader;
+        std::string error;
+        std::istringstream base(proto::engine_capabilities_json()), model_data(app.registry.capabilities_json());
+        Json::parseFromStream(reader, base, &data, &error);
+        Json::parseFromStream(reader, model_data, &models, &error);
+        data["models"] = models;
+        data["simulation"] = app.args.fake;
+        data["configuration_revision_ack"] = true;
+        data["configuration_revisions"] = Json::Value(Json::objectValue);
+        data["camera_frames"] = Json::Value(Json::objectValue);
+        {
+            std::lock_guard<std::mutex> lock(app.mu);
+            for (const auto& [id, revision] : app.configuration_revisions)
+                data["configuration_revisions"][std::to_string(id)] = Json::UInt64(revision);
+            for (const auto& [id, channel] : app.chans)
+                data["camera_frames"][std::to_string(id)] = channel->has_recent_frames() ? "receiving" :
+                    channel->state() == CameraChannel::State::LOADING ? "awaiting_first_frame" : "no_recent_frames";
+        }
+        Json::StreamWriterBuilder writer; a.data = Json::writeString(writer, data);
         return a;
     });
 
@@ -656,7 +696,7 @@ void register_handlers(App& app) {
             a.msg = "reload failed (rollback attempted): " + m.reload_algo.algo;
         }
         app.refresh_algo_core();
-        app.uds.emit(proto::encode_event(app.registry.snapshot()), 0);
+        app.emit_registry();
         return a;
     });
 
@@ -811,7 +851,7 @@ int main(int argc, char** argv) {
     // 新客户端连入即补发全量注册表（架构 §5.3 全量重同步——启动时的单次广播
     // 只覆盖当时已连接的客户端，businessd 后连入/重启会永远收不到 registry_ready）
     app.uds.set_on_connect(
-        [&app] { app.uds.emit(proto::encode_event(app.registry.snapshot()), 0); });
+        [&app] { app.emit_registry(); });
     if (!app.uds.start(app.args.uds)) {
         LOGE("main", "UDS listen fail: %s", app.args.uds.c_str());
         mon.stop();
@@ -820,7 +860,7 @@ int main(int argc, char** argv) {
         post_th.join();
         return 1;
     }
-    app.uds.emit(proto::encode_event(app.registry.snapshot()), 0);
+    app.emit_registry();
     LOGI("main", "core-engine up: mode=%s packages=%s uds=%s", app.args.fake ? "fake" : "board",
          app.args.packages.c_str(), app.args.uds.c_str());
 

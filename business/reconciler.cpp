@@ -154,8 +154,7 @@ int Reconciler::execute(const ConfigOperationRow& operation, UdsClient::Configur
         if (db_.get_camera_config_state(operation.camera_id, state) &&
             !state.applied_config_json.empty() && valid() && operation.attempts == 1 &&
             operation.target_revision == state.applied_revision + 1 &&
-            encode_camera_config(renamed) ==
-                operation.target_config_json)
+            encode_camera_config(renamed) == operation.target_config_json && !uds_.supports_revision_ack())
             return 0;
     }
     const bool rebuild = !had_previous || !previous.camera.enabled ||
@@ -205,6 +204,8 @@ int Reconciler::execute(const ConfigOperationRow& operation, UdsClient::Configur
         if (rc != 0)
             return rc;
     }
+    if (operation.target_revision > 0)
+        compiled.algos.configuration_revision = static_cast<uint64_t>(operation.target_revision);
     auto ack = uds_.set_algos(compiled.algos);
     if (ack.ret == 1002 && valid()) {
         const int rc = add();

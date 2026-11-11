@@ -1083,6 +1083,9 @@ async function pageEvents() {
         if (hasEventId) {
             row.dataset.eventId = String(j.event_id);
             row.appendChild(h('span', 'mono dim', `事件 #${j.event_id}`));
+            const importantBadge = h('span', 'warn-txt event-important-badge', '★ 重要');
+            importantBadge.hidden = !j.important;
+            row.appendChild(importantBadge);
         }
         row.append(
             h('span', 'mono dim', fmtMs(j.ts)),
@@ -1113,7 +1116,14 @@ async function pageEvents() {
         detailButton.title = hasEventId ? `查询事件 #${j.event_id}` : '等待关联本地事件 ID，可点击查询刷新';
         detailButton.onclick = () => {
             closeDetail?.();
-            closeDetail = showEventDetail(j.event_id, { cameraName: camName, classesOf });
+            closeDetail = showEventDetail(j.event_id, {
+                cameraName: camName, classesOf,
+                onUpdated(detail) {
+                    if (!alive) return;
+                    for (const item of histList.querySelectorAll(`[data-event-id="${j.event_id}"] .event-important-badge`))
+                        item.hidden = !detail.important;
+                },
+            });
         };
         row.append(detailButton);
         return row;
@@ -1179,7 +1189,7 @@ async function pageEvents() {
                     (e.task_revision || 0) === (j.task_revision || 0) && (e.rule_version || 0) === (j.rule_version || 0));
                 if (matches.length === 1 && alive && row.isConnected) {
                     const hit = matches[0];
-                    row.replaceWith(eventRow({ ...j, event_id: hit.id, snap: hit.snapshot || j.snap }));
+                    row.replaceWith(eventRow({ ...j, event_id: hit.id, important: hit.important, snap: hit.snapshot || j.snap }));
                 }
             } catch (_) { /* 静默：回填失败不扰用户 */ }
         }, 2000);

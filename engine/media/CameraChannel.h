@@ -69,8 +69,9 @@ public:
     ~CameraChannel(); // 未 stop 则自动 stop
 
     void start(); // INIT→LOADING
-    // RUNNING→RECONFIG→RUNNING，同步完成（<500ms 验收：drain + 换表，无 I/O）
-    void reconfigure(const std::vector<AlgoCfg>& algos);
+    // Accept configuration during LOADING as well as RUNNING. No I/O.
+    bool reconfigure(const std::vector<AlgoCfg>& algos);
+    bool has_recent_frames() const;
     void stop(); // →STOPPED
 
     State state() const {

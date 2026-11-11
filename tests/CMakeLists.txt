@@ -167,6 +167,11 @@ target_link_libraries(test_remote_access PRIVATE aibox_business)
 add_test(NAME remote_access COMMAND test_remote_access)
 set_tests_properties(remote_access PROPERTIES TIMEOUT 30)
 
+add_executable(test_event_important test_event_important.cpp)
+target_link_libraries(test_event_important PRIVATE aibox_business)
+add_test(NAME event_important COMMAND test_event_important)
+set_tests_properties(event_important PROPERTIES TIMEOUT 30)
+
 # Phase-one smoke uses Linux businessd and local doubles; no RKNN/board is needed.
 set_tests_properties(db config_compiler camera_service business_startup uds_client
     zlm_client http_api ws_hub ws_limits

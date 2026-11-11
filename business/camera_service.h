@@ -2,6 +2,7 @@
 
 #include "reconciler.h"
 #include <atomic>
+#include <json/json.h>
 #include <optional>
 
 namespace aibox {
@@ -23,6 +24,10 @@ struct TaskConfigurationResult {
     bool accepted = false;
     int64_t revision = 0;
     std::vector<ConfigurationResult> cameras;
+};
+struct EngineObservation {
+    std::string state = "executor_unavailable";
+    Json::Value capabilities;
 };
 
 class CameraService : public NonCopyable {
@@ -50,6 +55,7 @@ public:
         return running_ && uds_.online();
     }
     int64_t current_time() const;
+    EngineObservation observe_engine();
     bool reconcile_schedules();
 
 private:

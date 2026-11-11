@@ -18,6 +18,7 @@ public:
     Json::Value capabilities();
     Json::Value list();
     TaskResult get(int64_t id);
+    TaskResult diagnostics(int64_t id);
     TaskResult save(int64_t id, const Json::Value& body);
     TaskResult remove(int64_t id, const Json::Value& body);
     TaskResult preview(const Json::Value& body);

@@ -89,9 +89,11 @@ void run() {
     CHECK(json(result->body)["data"]["auth_required"].asBool());
     CHECK(!json(result->body)["data"]["authenticated"].asBool());
     result = client.Get("/"); REQUIRE(result); CHECK(result->status == 200);
-    for (const char* path : {"/api/system/info", "/api/auth/check", "/api/events/1", "/recordings/proof.mp4", "/api/cameras/1/snapshot"}) {
+    for (const char* path : {"/api/system/info", "/api/auth/check", "/api/events/1", "/api/tasks/1/diagnostics", "/recordings/proof.mp4", "/api/cameras/1/snapshot"}) {
         result = client.Get(path); REQUIRE(result); CHECK(result->status == 401);
     }
+    result = client.Put("/api/events/1/important", R"({"important":true,"revision":0})", "application/json");
+    REQUIRE(result); CHECK(result->status == 401);
     result = client.Post("/api/auth/login", "{\"token\":\"wrong\"}", "application/json"); REQUIRE(result); CHECK(result->status == 401);
     result = client.Post("/api/auth/login", {{"Origin", "https://evil.example.com"}}, "{\"token\":\"configured-test-secret\"}", "application/json");
     REQUIRE(result); CHECK(result->status == 403);
@@ -100,6 +102,10 @@ void run() {
     CHECK(set_cookie.find("HttpOnly") != std::string::npos && set_cookie.find("Secure") != std::string::npos);
     const std::string cookie = set_cookie.substr(0, set_cookie.find(';'));
     const httplib::Headers read_headers{{"Cookie", cookie}}, write_headers{{"Cookie", cookie}, {"Origin", params.public_origin}};
+    result = client.Put("/api/events/1/important", read_headers, R"({"important":true,"revision":0})", "application/json");
+    REQUIRE(result); CHECK(result->status == 403);
+    result = client.Put("/api/events/1/important", write_headers, R"({"important":true,"revision":0})", "application/json");
+    REQUIRE(result); CHECK(result->status == 200 && json(result->body)["code"].asInt() == 1002);
     result = client.Get("/api/system/info", read_headers); REQUIRE(result); CHECK(result->status == 200);
     CHECK(json(result->body)["data"]["same_origin_ws"].asBool());
     result = client.Get("/recordings/proof.mp4", read_headers); REQUIRE(result); CHECK(result->status == 200 && result->body == "private proof");

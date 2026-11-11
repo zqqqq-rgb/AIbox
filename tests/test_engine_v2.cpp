@@ -161,6 +161,38 @@ void unsupported_engine() {
     client.stop();
     server.stop();
 }
+void mismatched_configuration_ack() {
+    Temp tmp;
+    Db db(":memory:");
+    REQUIRE(db.migrate() == Db::kSchemaLatest);
+    UdsServer server(0);
+    server.on_cmd("get_capabilities", [](const auto&) {
+        auto value = json(proto::engine_capabilities_json());
+        value["configuration_revision_ack"] = true;
+        proto::Ack ack;
+        ack.has_data = true; ack.data = value.toStyledString();
+        return ack;
+    });
+    server.on_cmd("set_rules_v2", [](const auto& message) {
+        Json::Value value;
+        value["camera_id"] = message.set_algos.id;
+        value["configuration_revision"] = Json::UInt64(message.set_algos.configuration_revision + 1);
+        proto::Ack ack;
+        ack.has_data = true; ack.data = value.toStyledString();
+        return ack;
+    });
+    const auto socket = tmp.path + "/mismatch.sock";
+    REQUIRE(server.start(socket));
+    UdsClient client(socket, db, {}, {10, 200, 0, 10000, 3});
+    client.start();
+    REQUIRE(until([&] { return client.online(); }));
+    auto config = rules();
+    config.configuration_revision = 7;
+    const auto response = client.set_algos(config);
+    CHECK(response.ret == 1003 && response.msg.find("revision") != std::string::npos);
+    client.stop();
+    server.stop();
+}
 void pipeline(const char* engine_binary, const char* business_binary) {
     Temp tmp;
     fs::create_directories(tmp.path + "/packages/person");
@@ -221,7 +253,11 @@ void pipeline(const char* engine_binary, const char* business_binary) {
     std::string caps;
     REQUIRE(control.get_capabilities(&caps));
     CHECK(proto::supports_rule_v2(caps));
-    REQUIRE(control.set_algos(rules()).ret == 0);
+    auto revisioned = rules();
+    revisioned.configuration_revision = 42;
+    REQUIRE(proto::acknowledges_configuration(control.set_algos(revisioned), 1, 42));
+    REQUIRE(control.get_capabilities(&caps));
+    CHECK(json(caps)["configuration_revisions"]["1"].asUInt64() == 42);
     Json::Value events;
     REQUIRE(until([&] {
         auto r = http.Get("/api/events?camera_id=1&algo_id=person");
@@ -286,6 +322,35 @@ void pipeline(const char* engine_binary, const char* business_binary) {
         return count;
     };
     REQUIRE(until([&] { return rest_event_count()>=4; }));
+    auto capabilities = http.Get("/api/capabilities");
+    REQUIRE(capabilities && json(capabilities->body)["code"] == 0);
+    const auto catalogue = json(capabilities->body)["data"];
+    bool area_ready = false, crossing_unsupported = false;
+    for (const auto& capability : catalogue) {
+        if (capability["id"] == "region_in") {
+            area_ready = capability["status"] == "available" && capability["simulation"].asBool() &&
+                capability["models"][0]["algo_id"] == "person";
+        }
+        if (capability["id"] == "line_cross") crossing_unsupported = capability["status"] == "unsupported";
+    }
+    CHECK(area_ready && crossing_unsupported);
+    const auto diagnostic_path = "/api/tasks/" + std::to_string(task_ids.front()) + "/diagnostics";
+    auto diagnose = [&]() {
+        auto response = http.Get(diagnostic_path.c_str());
+        return response ? json(response->body)["data"] : Json::Value();
+    };
+    auto confirmed = [&]() {
+        const auto data = diagnose();
+        if (data["summary"]["reason_code"] != "configuration_confirmed" || data["cameras"].size() != 2)
+            return false;
+        for (const auto& camera : data["cameras"]) {
+            if (camera["engine_revision"].isNull() || camera["engine_revision"] != camera["desired_revision"] ||
+                camera["applied_revision"] != camera["desired_revision"])
+                return false;
+        }
+        return true;
+    };
+    REQUIRE(until(confirmed));
     auto running=[&] {
         for(auto task:task_ids) {
             auto response=http.Get(("/api/tasks/"+std::to_string(task)).c_str()); if(!response) return false;
@@ -297,15 +362,24 @@ void pipeline(const char* engine_binary, const char* business_binary) {
     business.stop();
     business.start({business_binary,"--config",tmp.path+"/config.json"},tmp.path+"/business-restart.log");
     REQUIRE(until(running)); // Same engine survives; V2 snapshots are replayed on both cameras.
+    REQUIRE(until(confirmed));
     engine.stop();
     REQUIRE(until([&] { return !running(); }));
+    REQUIRE(until([&] { return diagnose()["summary"]["reason_code"] == "engine_offline"; }));
+    capabilities = http.Get("/api/capabilities");
+    REQUIRE(capabilities);
+    const auto offline_catalogue = json(capabilities->body)["data"];
+    for (const auto& capability : offline_catalogue)
+        if (capability["id"] == "region_in") CHECK(capability["status"] == "blocked");
     engine.start({engine_binary,"--fake","--video",tmp.path+"/video.nv12","--packages",tmp.path+"/packages",
                   "--uds",tmp.path+"/engine.sock","--frame-w","64","--frame-h","64","--fake-fps","10"},tmp.path+"/engine-restart.log");
     REQUIRE(until(running)); // Empty engine process is fully rebuilt from durable V2 snapshots.
+    REQUIRE(until(confirmed));
     for(auto task:task_ids) {
         auto response=http.Put(("/api/tasks/"+std::to_string(task)+"/enabled").c_str(),R"({"revision":2,"enabled":false})","application/json");
         REQUIRE(response && json(response->body)["code"]==0 && json(response->body)["data"]["status"]=="disabled");
     }
+    REQUIRE(until([&] { return diagnose()["summary"]["reason_code"] == "task_disabled"; }));
     business.stop();
     engine.stop();
     // Persistence must survive an actual process exit and database reopen.
@@ -319,6 +393,7 @@ int main(int argc, char** argv) {
         return 2;
     try {
         unsupported_engine();
+        mismatched_configuration_ack();
         pipeline(argv[1], argv[2]);
     } catch (const std::exception& e) {
         fprintf(stderr, "engine_v2: %s\n", e.what());

@@ -1,5 +1,5 @@
 import { api } from './api.js';
-import { h, toast, confirmModal } from './ui.js';
+import { h, toast, confirmModal, fmtMs } from './ui.js';
 import { taskStates, minuteText, parsePolygon, scheduleValue, editableTask, taskTransition, validateTaskDraft } from './task_model.js';
 
 const fullRegion = [[0, 0], [1, 0], [1, 1], [0, 1]];
@@ -108,6 +108,73 @@ export async function pageTasks() {
     let cameras = [], models = [], capabilities = [];
     const progress = h('div');
     const inspection = h('div');
+    const capabilityPanel = h('details', 'panel task-capabilities');
+    const capabilityRows = h('div', 'task-capability-grid');
+    const capabilityStatus = h('p', 'small'); capabilityStatus.setAttribute('role', 'status');
+    const capabilityRefresh = button('刷新能力状态', async () => {
+        capabilityRefresh.disabled = true;
+        capabilityStatus.textContent = '正在读取引擎能力…';
+        try {
+            const result = await api.listCapabilities({ silent: true });
+            if (!alive) return;
+            capabilities = result;
+            renderCapabilities();
+        } catch (e) {
+            if (alive) { capabilityRows.replaceChildren(); capabilityStatus.textContent = `读取能力失败：${e.message}`; }
+        } finally { capabilityRefresh.disabled = false; }
+    });
+    capabilityPanel.append(h('summary', '', '能力可用性'), capabilityRefresh, capabilityStatus, capabilityRows);
+    wrap.insertBefore(capabilityPanel, layout);
+    const statusText = { available: '可用', blocked: '受阻', unsupported: '不支持', waiting: '等待', inactive: '未运行', partial: '部分就绪' };
+    function addFinding(parent, finding) {
+        parent.append(h('p', finding.status === 'available' ? 'ok-txt' : 'small', finding.reason));
+        if (finding.next_step) parent.append(h('p', 'small dim', finding.next_step));
+    }
+    function renderCapabilities() {
+        capabilityRows.replaceChildren();
+        capabilityStatus.textContent = capabilities.some((row) => row.simulation === true) ? '当前为模拟推理环境' : '';
+        const names = { region_in: '区域入侵', dwell: '区域驻留', state_switch: '状态变化', line_cross: '越线', count: '计数', absence: '缺失', loitering: '徘徊', proximity: '接近', speed: '速度', compound: '组合规则', ref_geom: '参考几何' };
+        for (const capability of capabilities) {
+            const row = h('section', 'task-diagnostic-row');
+            row.append(h('strong', '', `${names[capability.id] || capability.name} · ${statusText[capability.status] || capability.status}`));
+            addFinding(row, capability);
+            for (const model of capability.models || [])
+                row.append(h('p', 'small dim', `${model.algo_id}${model.version ? ` v${model.version}` : ''} · ${statusText[model.status]}${model.status === 'available' ? '' : ` · ${model.reason}`}`));
+            capabilityRows.append(row);
+        }
+    }
+    async function runDiagnostics(task, control) {
+        const generation = editorGeneration;
+        control.disabled = true;
+        inspection.replaceChildren(h('p', 'small dim', '正在核对任务配置…'));
+        try {
+            const result = await api.getTaskDiagnostics(task.id, { silent: true });
+            if (!alive || generation !== editorGeneration) return;
+            const report = h('section', 'task-diagnostic-report');
+            report.append(h('h3', '', '任务诊断结果'));
+            addFinding(report, result.summary);
+            const engineState = { online: '引擎已连接', engine_offline: '引擎未连接', engine_syncing: '引擎同步中', engine_declaration_missing: '引擎未声明诊断能力', engine_query_failed: '引擎状态暂不可读取', executor_unavailable: '任务执行器未启动' };
+            report.append(h('p', 'small dim', `${result.simulation === true ? '模拟推理 · ' : ''}${engineState[result.engine_state] || '引擎状态未知'} · 任务版本 ${result.task_revision} · 核对时间 ${fmtMs(result.observed_at)}`));
+            for (const issue of result.model_issues || []) {
+                const row = h('section', 'task-diagnostic-row');
+                row.append(h('strong', '', `${issue.algo_id}${issue.rule_key ? ` · ${issue.rule_key}` : ''}`));
+                addFinding(row, issue); report.append(row);
+            }
+            for (const camera of result.cameras || []) {
+                const row = h('section', 'task-diagnostic-row');
+                row.append(h('strong', '', `${camera.camera_name || '摄像头'} (#${camera.camera_id}) · ${statusText[camera.status]}`));
+                addFinding(row, camera);
+                row.append(h('p', 'small mono', `目标版本 ${camera.desired_revision} · 业务已确认 ${camera.applied_revision} · 引擎回报 ${camera.engine_revision ?? '无'}`));
+                if (camera.operation?.last_error) row.append(h('p', 'small warn-txt', camera.operation.last_error));
+                if (camera.operation?.next_retry_at > 0) row.append(h('p', 'small dim', `重试时间 ${fmtMs(camera.operation.next_retry_at)}`));
+                report.append(row);
+            }
+            inspection.replaceChildren(report);
+        } catch (e) {
+            if (alive && generation === editorGeneration)
+                inspection.replaceChildren(h('p', 't-err', `读取任务诊断失败：${e.message}`));
+        } finally { control.disabled = false; }
+    }
     const newButton = button('新建任务', () => open(null), 'btn-acc'); head.append(newButton);
     function diagnostics() {
         progress.replaceChildren();
@@ -239,6 +306,8 @@ export async function pageTasks() {
             toast('草稿已保存', 'ok'); busy = false; open(saved); await reload();
         }), 'btn-acc'));
         if (task) {
+            const diagnoseButton = button('运行诊断', () => runDiagnostics(task, diagnoseButton));
+            actions.append(diagnoseButton);
             actions.append(button(task.enabled ? '停用任务' : '启用任务', () => perform(async () => {
                 let result;
                 try { result = await api.setTaskEnabled(task.id, task.revision, !task.enabled); }
@@ -271,6 +340,7 @@ export async function pageTasks() {
         [cameras, models, capabilities] = await Promise.all([api.listCameras(), api.listAlgorithms(), api.listCapabilities()]);
         if (!alive) return { unmount() {} };
         models = models.filter((m) => !m.disabled);
+        renderCapabilities();
         await reload(); if (alive) open(null);
         timer = setInterval(reload, 2000);
     } catch (e) { if (alive) error.textContent = e.message; }

@@ -115,15 +115,17 @@ export const api = {
     listAlgorithms: () => request('GET', '/api/algorithms'),
     listTasks: (opt) => request('GET', '/api/tasks', undefined, opt),
     getTask: (id) => request('GET', `/api/tasks/${id}`),
+    getTaskDiagnostics: (id, opt) => request('GET', `/api/tasks/${encodeURIComponent(id)}/diagnostics`, undefined, opt),
     saveTask: (id, body) => request(id ? 'PUT' : 'POST', id ? `/api/tasks/${id}` : '/api/tasks', body),
     deleteTask: (id, revision) => request('DELETE', `/api/tasks/${id}`, { revision }),
     setTaskEnabled: (id, revision, enabled) => configuration('PUT', `/api/tasks/${id}/enabled`, { revision, enabled }),
-    listCapabilities: () => request('GET', '/api/capabilities'),
+    listCapabilities: (opt) => request('GET', '/api/capabilities', undefined, opt),
     previewTasks: (camera_id) => request('POST', '/api/tasks/preview', { camera_id, include_drafts: true }),
     rollbackAlgo: (id) => request('POST', `/api/algorithms/${id}/rollback`, undefined, { silent: true }),
     // 事件 / 录像（from/to 单位均为 ms——db 层 start_ts=ZLM 秒×1000，events.ts=ms）
     listEvents: (q, opt) => request('GET', '/api/events?' + new URLSearchParams(q), undefined, opt),
     getEvent: (id, opt) => request('GET', `/api/events/${encodeURIComponent(id)}`, undefined, opt),
+    setEventImportant: (id, important, revision, opt) => request('PUT', `/api/events/${encodeURIComponent(id)}/important`, { important, revision }, opt),
     listRecordings: (q) => request('GET', '/api/recordings?' + new URLSearchParams(q)),
     // 系统
     getResources: (opt) => request('GET', '/api/resources', undefined, opt),

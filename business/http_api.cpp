@@ -504,6 +504,7 @@ void HttpApi::register_routes() {
     // Task drafts and previews do not send engine commands. Legacy writes keep using CameraService.
     auto task_reply=[](httplib::Response& res,const TaskResult& result) { reply(res,result.code,result.message,&result.data); };
     svr_->Get("/api/capabilities",auth_wrap([this](const httplib::Request&,httplib::Response& res) {
+        res.set_header("Cache-Control", "no-store");
         TaskService tasks(*d_.db,d_.npu_cores,d_.npu_mem_total_kb,cameras_.get()); reply_data(res,tasks.capabilities());
     }));
     svr_->Get("/api/tasks",auth_wrap([this](const httplib::Request&,httplib::Response& res) {
@@ -512,6 +513,11 @@ void HttpApi::register_routes() {
     svr_->Get(R"(/api/tasks/(\d+))",auth_wrap([this,task_reply](const httplib::Request& req,httplib::Response& res) {
         const auto id=parse_id(req.matches[1].str());
         TaskService tasks(*d_.db,d_.npu_cores,d_.npu_mem_total_kb,cameras_.get()); task_reply(res,tasks.get(id));
+    }));
+    svr_->Get(R"(/api/tasks/(\d+)/diagnostics)", auth_wrap([this, task_reply](const httplib::Request& req, httplib::Response& res) {
+        TaskService tasks(*d_.db, d_.npu_cores, d_.npu_mem_total_kb, cameras_.get());
+        res.set_header("Cache-Control", "no-store");
+        task_reply(res, tasks.diagnostics(parse_id(req.matches[1].str())));
     }));
     svr_->Post("/api/tasks",auth_wrap([this,task_reply](const httplib::Request& req,httplib::Response& res) {
         Json::Value body; if(!parse_task_body(req.body,&body)) { reply_err(res,1001,"invalid task JSON or body over 2 MiB"); return; }
@@ -840,10 +846,20 @@ void HttpApi::register_routes() {
         reply_data(res, data);
     }));
 
-    // Event details use the same authentication policy as the existing list.
+    // 事件详情使用与现有列表相同的认证策略。
     svr_->Get(R"(/api/events/(\d+))", auth_wrap([this](const httplib::Request& req,
                                                                httplib::Response& res) {
         const auto result = EventService(*d_.db).detail(parse_id(req.matches[1].str()));
+        reply(res, result.code, result.message, &result.data);
+    }));
+
+    svr_->Put(R"(/api/events/(\d+)/important)", auth_wrap([this](const httplib::Request& req,
+                                                                        httplib::Response& res) {
+        Json::Value body;
+        if (req.body.size() > 1024 || !parse_task_body(req.body, &body)) {
+            reply(res, 1001, "expected event importance JSON body"); return;
+        }
+        const auto result = EventService(*d_.db).set_important(parse_id(req.matches[1].str()), body);
         reply(res, result.code, result.message, &result.data);
     }));
 
@@ -871,6 +887,8 @@ void HttpApi::register_routes() {
             o["algo_id"] = e.algo_id;
             o["task_id"] = Json::Int64(e.task_id); o["rule_id"] = Json::Int64(e.rule_id);
             o["task_revision"] = Json::Int64(e.task_revision); o["rule_version"] = Json::Int64(e.rule_version);
+            o["important"] = e.important;
+            o["important_revision"] = Json::Int64(e.important_revision);
             o["type"] = e.type;
             o["ts"] = e.ts;
             if (!e.snapshot_path.empty()) o["snapshot"] = e.snapshot_path;

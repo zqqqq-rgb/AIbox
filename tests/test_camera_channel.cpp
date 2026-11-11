@@ -124,6 +124,11 @@ int main() {
         CHECK(ch.state() == CameraChannel::State::INIT);
         ch.start();
         CHECK(ch.state() == CameraChannel::State::LOADING);
+        CameraChannel::AlgoCfg config;
+        config.algo_id = "person"; config.detect_fps = 7;
+        CHECK(ch.reconfigure({config}));
+        CHECK(ch.sampler().fps() == 7);
+        CHECK(ch.state() == CameraChannel::State::LOADING && !ch.has_recent_frames());
         // 无帧 → 不迁移 RUNNING；看门狗会在超时后重启（此处不断言，用例 3 专测）
         ch.stop();
         CHECK(ch.state() == CameraChannel::State::STOPPED);

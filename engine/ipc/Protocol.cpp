@@ -155,6 +155,8 @@ std::string encode_request(uint64_t msg_id, const SetAlgos& v) {
     r["id"] = v.id;
     if (v.config_version != 1)
         r["config_version"] = v.config_version;
+    if (v.configuration_revision)
+        r["configuration_revision"] = Json::UInt64(v.configuration_revision);
     Json::Value arr(Json::arrayValue);
     for (const auto& a : v.algos) {
         Json::Value o(Json::objectValue);
@@ -301,6 +303,7 @@ std::string encode_event(const CamStatusEvt& v) {
 
 std::string encode_event(const RegistryReadyEvt& v) {
     Json::Value r = make_envelope("evt", "registry_ready");
+    if (v.configuration_revision_ack) r["configuration_revision_ack"] = true;
     Json::Value arr(Json::arrayValue);
     for (const auto& a : v.algos) {
         Json::Value o(Json::objectValue);
@@ -386,6 +389,20 @@ std::string encode_ack(const Ack& v) {
 }
 
 // ---- 解码 ----
+bool acknowledges_configuration(const Ack& ack, uint32_t camera, uint64_t revision) {
+    Json::Value value; std::string error;
+    return ack.ret == 0 && ack.has_data &&
+        make_reader()->parse(ack.data.data(), ack.data.data() + ack.data.size(), &value, &error) &&
+        value.isObject() && value["camera_id"].isUInt() && value["camera_id"].asUInt() == camera &&
+        (value["configuration_revision"].type() == Json::uintValue || value["configuration_revision"].type() == Json::intValue) &&
+        value["configuration_revision"].isUInt64() && value["configuration_revision"].asUInt64() == revision;
+}
+bool supports_configuration_revisions(const std::string& text) {
+    Json::Value value; std::string error;
+    return make_reader()->parse(text.data(), text.data() + text.size(), &value, &error) &&
+        value.isObject() && value["configuration_revision_ack"].isBool() &&
+        value["configuration_revision_ack"].asBool();
+}
 bool supports_rule_v2(const std::string& text) {
     Json::Value value;
     std::string error;
@@ -464,12 +481,19 @@ int decode_line(const std::string& line, ParsedMsg& out) {
                     return kErrProtocol;
                 for (const auto& key : root.getMemberNames())
                     if (key != "cmd" && key != "msg_id" && key != "id" && key != "config_version" &&
-                        key != "algos")
+                        key != "algos" && key != "configuration_revision")
                         return kErrProtocol;
                 v.config_version = 2;
             } else if (root.isMember("config_version") && root["config_version"] != 1)
                 return kErrProtocol;
             GET_U32(root, "id", v.id);
+            if (root.isMember("configuration_revision")) {
+                const auto& revision = root["configuration_revision"];
+                if ((revision.type() != Json::intValue && revision.type() != Json::uintValue) ||
+                    !revision.isUInt64() || revision.asUInt64() == 0 || revision.asUInt64() > INT64_MAX)
+                    return kErrProtocol;
+                v.configuration_revision = revision.asUInt64();
+            }
             const Json::Value& arr = root["algos"];
             if (!arr.isArray())
                 return kErrProtocol;
@@ -595,6 +619,8 @@ int decode_line(const std::string& line, ParsedMsg& out) {
                 return kErrProtocol;
             v.online = on.asBool();
         } else if (e == "registry_ready") {
+            const auto& revisions = root["configuration_revision_ack"];
+            out.registry_ready.configuration_revision_ack = revisions.isBool() && revisions.asBool();
             const Json::Value& arr = root["algos"];
             if (!arr.isArray())
                 return kErrProtocol;

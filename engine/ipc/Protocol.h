@@ -54,6 +54,7 @@ struct SetAlgos {
     uint32_t id = 0;
     std::vector<AlgoCfg> algos;
     uint32_t config_version = 1; // V2 uses a distinct command: old engines must reject it.
+    uint64_t configuration_revision = 0; // Negotiated; 0 = legacy command ACK only.
 };
 
 struct RemoveCam {
@@ -92,6 +93,7 @@ struct RegistryAlgo { // registry_ready 的 algos[] 条目
 
 struct RegistryReadyEvt { // 启动/热升级/回滚后
     std::vector<RegistryAlgo> algos;
+    bool configuration_revision_ack = false;
 };
 
 struct DetTarget {
@@ -178,6 +180,8 @@ struct ParsedMsg {
 // 返回 kOk / kErrProtocol（坏 JSON、截断、未知 cmd/evt、缺必填字段——连接不断）
 int decode_line(const std::string& line, ParsedMsg& out);
 bool validate_v2_config(const SetAlgos& config, std::string& error);
+bool acknowledges_configuration(const Ack& ack, uint32_t camera, uint64_t revision);
+bool supports_configuration_revisions(const std::string& capabilities);
 std::string engine_capabilities_json();
 bool supports_rule_v2(const std::string& capabilities);
 

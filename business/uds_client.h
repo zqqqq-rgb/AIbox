@@ -88,6 +88,7 @@ public:
     bool online() const { return state() == State::ONLINE; }
     SyncStats sync_stats() const;
     uint64_t connection_epoch() const { return epoch_.load(); }
+    bool supports_revision_ack() const { return revision_support_epoch_.load() == connection_epoch(); }
     class ConfigurationLease {
     public:
         bool valid() const { return owner_.online() && owner_.connection_epoch() == epoch_; }
@@ -111,7 +112,7 @@ public:
     proto::Ack remove_cam(const proto::RemoveCam& v);
     proto::Ack reload_algo(const proto::ReloadAlgo& v);
     bool get_metrics(std::string* data_out, int timeout_ms = 3000);  // data=ack.data
-    bool get_capabilities(std::string* data_out, int timeout_ms = 1000);
+    bool get_capabilities(std::string* data_out, int timeout_ms = 1000, bool require_advertisement = false);
 
     // WsHub 引用计数联动（fire-and-forget：不等待 ack，不阻塞转发路径）。
     // 记入 active_subs_，重连后自动重发——engine 重启不丢订阅。
@@ -133,7 +134,7 @@ private:
     void arm_pending(uint64_t msg_id);
     void disarm_pending(uint64_t msg_id);
     proto::Ack request_for(uint64_t msg_id, const std::string& line,
-                           int timeout_ms);  // 跨线程 cv 等
+                           int timeout_ms, uint64_t expected_epoch = 0);  // 跨线程 cv 等
     void fail_all_pending(const char* reason);  // 断线时唤醒所有等待者
     uint64_t next_msg_id() { return msg_seq_.fetch_add(1, std::memory_order_relaxed); }
     void set_state(State s);
@@ -150,6 +151,7 @@ private:
     std::mutex send_mu_;
     std::mutex configuration_mu_;
     std::atomic<uint64_t> epoch_{1};
+    std::atomic<uint64_t> revision_support_epoch_{0};
     std::mutex cmd_mu_;                // 命令因果序（全局串行）
 
     std::mutex ack_mu_;
