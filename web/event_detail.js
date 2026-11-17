@@ -12,6 +12,62 @@ export function dispositionLabel(status) {
     return dispositions.get(status)?.label || '状态未知';
 }
 
+function dispositionHistory(id, isCurrent) {
+    const panel = h('details', 'disposition-history');
+    const entries = h('ol', 'disposition-history-entries');
+    const status = h('p', 'small dim');
+    status.setAttribute('aria-live', 'polite');
+    const more = h('button', 'btn', '加载更早记录');
+    more.hidden = true;
+    let generation = 0;
+    let loaded = false;
+    let next = null;
+    panel.append(h('summary', '', '处置记录'), entries, status, more);
+
+    async function load(beforeRevision = null) {
+        const request = ++generation;
+        more.disabled = true;
+        status.textContent = '正在读取处置记录…';
+        try {
+            const result = await api.getEventDispositionHistory(id, beforeRevision, { silent: true });
+            if (!isCurrent() || request !== generation) return;
+            if (beforeRevision === null) entries.replaceChildren();
+            for (const entry of result.entries) {
+                const item = h('li', 'disposition-history-entry');
+                const heading = h('div', 'row disposition-history-heading');
+                const time = h('time', 'small dim', fmtMs(entry.changed_at));
+                heading.append(h('strong', '', `${dispositionLabel(entry.from_status)} → ${dispositionLabel(entry.to_status)}`), time);
+                item.append(heading,
+                    h('p', 'small dim', `填写人：${entry.operator_name ?? '未记录'}`),
+                    h('p', 'small disposition-history-note', entry.note ?? '未记录备注'));
+                entries.append(item);
+            }
+            loaded = true;
+            next = result.next_before_revision;
+            status.textContent = entries.childElementCount ? '' : '暂无处置记录';
+            more.hidden = next == null;
+            more.textContent = '加载更早记录';
+            more.onclick = () => load(next);
+        } catch (failure) {
+            if (!isCurrent() || request !== generation) return;
+            status.textContent = `读取处置记录失败：${failure.message}`;
+            more.hidden = false;
+            more.textContent = '重试读取记录';
+            more.onclick = () => load(beforeRevision);
+        } finally {
+            if (request === generation) more.disabled = false;
+        }
+    }
+    panel.ontoggle = () => { if (panel.open && !loaded) load(); };
+    return {
+        panel,
+        refresh() {
+            loaded = false;
+            if (panel.open) load();
+        },
+    };
+}
+
 function dispositionControls(id, detail, { onUpdated, isCurrent }) {
     const section = h('section', 'event-disposition');
     section.setAttribute('aria-label', '事件处置');
@@ -19,7 +75,22 @@ function dispositionControls(id, detail, { onUpdated, isCurrent }) {
     const buttons = h('div', 'row event-disposition-actions');
     const message = h('p', 'small');
     message.setAttribute('aria-live', 'polite');
-    section.append(state, buttons, message);
+    const fields = h('div', 'disposition-record-fields');
+    const author = h('input', 'inp');
+    author.type = 'text';
+    author.maxLength = 120;
+    const authorLabel = h('label', '', '处理人（填写姓名或工号，选填）');
+    authorLabel.append(author);
+    const note = h('textarea', 'inp');
+    note.rows = 2;
+    note.maxLength = 1000;
+    const noteLabel = h('label', '', '处置备注（选填）');
+    noteLabel.append(note);
+    fields.append(authorLabel, noteLabel);
+    fields.hidden = detail.disposition_history_supported !== true;
+    const history = detail.disposition_history_supported === true ? dispositionHistory(id, isCurrent) : null;
+    section.append(state, fields, buttons, message);
+    if (history) section.append(history.panel);
 
     function render() {
         state.textContent = `处置状态：${dispositionLabel(detail.disposition)}`;
@@ -47,12 +118,25 @@ function dispositionControls(id, detail, { onUpdated, isCurrent }) {
     }
 
     async function save(desired) {
+        const payload = { disposition: desired, revision: detail.disposition_revision };
+        if (history) {
+            payload.operator_name = author.value.trim();
+            payload.note = note.value.trim();
+            const encoder = new TextEncoder();
+            if (encoder.encode(payload.operator_name).length > 120 || encoder.encode(payload.note).length > 1000) {
+                message.textContent = '内容过长。处理人最多 120 个 UTF-8 字节，备注最多 1000 个 UTF-8 字节。';
+                return;
+            }
+        }
         for (const button of buttons.children) button.disabled = true;
+        author.disabled = note.disabled = true;
         message.textContent = '正在保存处置状态…';
         try {
-            const result = await api.setEventDisposition(id, desired, detail.disposition_revision, { silent: true });
+            const result = await api.setEventDisposition(id, payload, { silent: true });
             applyDisposition(result);
             if (!isCurrent()) return;
+            note.value = '';
+            history?.refresh();
             render();
             message.textContent = `处置状态已保存：${dispositionLabel(detail.disposition)}`;
         } catch (failure) {
@@ -69,11 +153,14 @@ function dispositionControls(id, detail, { onUpdated, isCurrent }) {
                     applyDisposition(current);
                     message.textContent = '';
                     render();
+                    history?.refresh();
                 } catch (error) {
                     if (isCurrent()) message.textContent = `读取处置状态失败：${error.message}`;
                 } finally { refresh.disabled = false; }
             };
             buttons.replaceChildren(refresh);
+        } finally {
+            author.disabled = note.disabled = false;
         }
     }
     render();

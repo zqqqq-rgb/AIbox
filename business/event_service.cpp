@@ -8,6 +8,7 @@ namespace {
 
 // Status values and transitions are owned by the service. The UI uses the returned options.
 constexpr const char* kStatuses[] = {"pending", "acknowledged", "processing", "resolved", "ignored"};
+constexpr Json::ArrayIndex kHistoryPageSize = 20;
 
 Json::Value next_dispositions(const std::string& status) {
     Json::Value allowed(Json::arrayValue);
@@ -34,6 +35,22 @@ bool is_revision(const Json::Value& value) {
 int64_t now_ms() {
     return std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+bool read_history_text(const Json::Value& body, const char* key, size_t max_bytes,
+                       bool multiline, std::string& out) {
+    if (!body.isMember(key)) return true;
+    if (!body[key].isString()) return false;
+    auto value = body[key].asString();
+    if (value.size() > max_bytes) return false;
+    for (unsigned char c : value) {
+        if ((c < 32 || c == 127) && !(multiline && (c == '\n' || c == '\r' || c == '\t')))
+            return false;
+    }
+    const auto start = value.find_first_not_of(" \t\r\n");
+    if (start != std::string::npos)
+        out = value.substr(start, value.find_last_not_of(" \t\r\n") - start + 1);
+    return true;
 }
 
 }  // namespace
@@ -64,6 +81,7 @@ EventResult EventService::detail(int64_t id) {
     data["important"] = row->i64(12) != 0;
     data["important_revision"] = Json::Int64(row->i64(13));
     add_disposition(data, row->text(14), row->i64(15));
+    data["disposition_history_supported"] = true;
     const char* sources[] = {"task_id", "rule_id", "task_revision", "rule_version"};
     for (int i = 0; i < 4; ++i) data[sources[i]] = Json::Int64(row->i64(8 + i));
 
@@ -119,9 +137,17 @@ EventResult EventService::set_important(int64_t id, const Json::Value& body) {
 }
 
 EventResult EventService::set_disposition(int64_t id, const Json::Value& body) {
-    if (id <= 0 || !body.isObject() || body.size() != 2 || !body["disposition"].isString() ||
+    if (id <= 0 || !body.isObject() || !body["disposition"].isString() ||
         !is_revision(body["revision"]))
         return {1001, "expected event id, disposition and nonnegative integer revision", {}};
+    for (const auto& key : body.getMemberNames()) {
+        if (key != "disposition" && key != "revision" && key != "operator_name" && key != "note")
+            return {1001, "unknown event disposition field", {}};
+    }
+    std::string operator_name, note;
+    if (!read_history_text(body, "operator_name", 120, false, operator_name) ||
+        !read_history_text(body, "note", 1000, true, note))
+        return {1001, "invalid operator name (120 bytes) or note (1000 bytes)", {}};
     const auto desired = body["disposition"].asString();
     bool valid_status = false;
     for (const auto* status : kStatuses) if (desired == status) valid_status = true;
@@ -147,6 +173,10 @@ EventResult EventService::set_disposition(int64_t id, const Json::Value& body) {
         return {1003, "event disposition changed; reload detail", data};
     }
     if (previous == desired) {
+        if (!operator_name.empty() || !note.empty()) {
+            data["reason_code"] = "unchanged_disposition";
+            return {1003, "operator and note require a disposition change", data};
+        }
         if (!txn.commit()) return {5001, "event disposition commit failed", {}};
         return {0, "ok", data};
     }
@@ -165,13 +195,55 @@ EventResult EventService::set_disposition(int64_t id, const Json::Value& body) {
         !update->bind(3, id) || !update->run() || db_.changes() != 1)
         return {5001, "event disposition update failed", {}};
     auto history = db_.prepare("INSERT INTO event_disposition_history"
-                               "(event_id,revision,from_status,to_status,changed_at) VALUES(?1,?2,?3,?4,?5);");
+                               "(event_id,revision,from_status,to_status,changed_at,operator_name,note) "
+                               "VALUES(?1,?2,?3,?4,?5,NULLIF(?6,''),NULLIF(?7,''));");
     if (!history || !history->bind(1, id) || !history->bind(2, revision + 1) ||
-        !history->bind(3, previous) || !history->bind(4, desired) || !history->bind(5, now_ms()) || !history->run())
+        !history->bind(3, previous) || !history->bind(4, desired) || !history->bind(5, now_ms()) ||
+        !history->bind(6, operator_name) || !history->bind(7, note) || !history->run())
         return {5001, "event disposition history failed", {}};
     if (!txn.commit()) return {5001, "event disposition commit failed", {}};
     add_disposition(data, desired, revision + 1);
     data["changed"] = true;
+    return {0, "ok", data};
+}
+
+EventResult EventService::disposition_history(int64_t id, int64_t before_revision) {
+    if (id <= 0 || before_revision < 0) return {1001, "invalid event id or history cursor", {}};
+    Db::Txn txn(db_);
+    if (!txn.active()) return {5001, "event history transaction failed", {}};
+    auto row = db_.prepare("SELECT e.id,h.revision,h.from_status,h.to_status,h.changed_at,h.operator_name,h.note "
+                           "FROM (SELECT 1) anchor LEFT JOIN events e ON e.id=?1 "
+                           "LEFT JOIN event_disposition_history h ON h.event_id=e.id AND h.revision<=?2 "
+                           "ORDER BY h.revision DESC LIMIT ?3;");
+    const auto max_revision = before_revision ? before_revision - 1 : std::numeric_limits<int64_t>::max();
+    if (!row || !row->bind(1, id) || !row->bind(2, max_revision) ||
+        !row->bind(3, int64_t(kHistoryPageSize + 1)) || !row->step())
+        return {5001, "event history query failed", {}};
+    if (row->is_null(0)) return {1002, "event not found", {}};
+
+    Json::Value entries(Json::arrayValue);
+    Json::Value next;
+    do {
+        if (row->is_null(1)) break;
+        if (entries.size() == kHistoryPageSize) {
+            next = entries[entries.size() - 1]["revision"];
+            break;
+        }
+        Json::Value entry;
+        entry["revision"] = Json::Int64(row->i64(1));
+        entry["from_status"] = row->text(2);
+        entry["to_status"] = row->text(3);
+        entry["changed_at"] = Json::Int64(row->i64(4));
+        entry["operator_name"] = row->is_null(5) ? Json::Value() : Json::Value(row->text(5));
+        entry["note"] = row->is_null(6) ? Json::Value() : Json::Value(row->text(6));
+        entries.append(std::move(entry));
+    } while (row->step());
+    if (!db_.last_error().empty()) return {5001, "event history query failed", {}};
+    row.reset();
+    if (!txn.commit()) return {5001, "event history commit failed", {}};
+    Json::Value data;
+    data["entries"] = std::move(entries);
+    data["next_before_revision"] = std::move(next);
     return {0, "ok", data};
 }
 

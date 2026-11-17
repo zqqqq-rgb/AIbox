@@ -368,13 +368,21 @@ void test_events() {
     res = cli.Put(important_path.c_str(), R"({"important":false,"revision":1})", "application/json");
     CHECK(res && parse_json(res->body)["code"].asInt() == 0);
     const auto disposition_path = "/api/events/" + std::to_string(event_id) + "/disposition";
-    res = cli.Put(disposition_path.c_str(), R"({"disposition":"acknowledged","revision":0})", "application/json");
+    res = cli.Put(disposition_path.c_str(), R"({"disposition":"acknowledged","revision":0,"operator_name":"OP-42","note":"checked"})", "application/json");
     CHECK(res && parse_json(res->body)["code"] == 0);
     CHECK(res && parse_json(res->body)["data"]["disposition_revision"].asInt64() == 1);
     res = cli.Put(disposition_path.c_str(), R"({"disposition":"resolved","revision":1})", "application/json");
     CHECK(res && parse_json(res->body)["data"]["reason_code"] == "transition_not_allowed");
     res = cli.Get("/api/events?camera_id=1&algo_id=person");
     CHECK(res && parse_json(res->body)["data"][0]["disposition"] == "acknowledged");
+    res = cli.Get((disposition_path + "/history").c_str());
+    CHECK(res && res->get_header_value("Cache-Control") == "no-store");
+    if (res) {
+        const auto entries = parse_json(res->body)["data"]["entries"];
+        CHECK(entries.size() == 1 && entries[0]["operator_name"] == "OP-42" && entries[0]["note"] == "checked");
+    }
+    res = cli.Get((disposition_path + "/history?before_revision=0").c_str());
+    CHECK(res && parse_json(res->body)["code"] == 1001);
     CHECK(r.eng.commands() == commands);
 }
 

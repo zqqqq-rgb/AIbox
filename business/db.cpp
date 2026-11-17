@@ -187,6 +187,10 @@ const char* kMigrationV10 =
     "revision INTEGER NOT NULL CHECK(revision>0), from_status TEXT NOT NULL, to_status TEXT NOT NULL,"
     "changed_at INTEGER NOT NULL, PRIMARY KEY(event_id,revision));";
 
+const char* kMigrationV11 =
+    "ALTER TABLE event_disposition_history ADD COLUMN operator_name TEXT;"
+    "ALTER TABLE event_disposition_history ADD COLUMN note TEXT;";
+
 }  // namespace
 
 // ---- open / migrate ----
@@ -238,7 +242,8 @@ int Db::migrate() {
 
     static const char* const kMigrations[] = {kMigrationV1, kMigrationV2,
                                               kMigrationV3, kMigrationV4, kMigrationV5, kMigrationV6,
-                                              kMigrationV7, kMigrationV8, kMigrationV9, kMigrationV10};
+                                              kMigrationV7, kMigrationV8, kMigrationV9, kMigrationV10,
+                                              kMigrationV11};
     static_assert(sizeof(kMigrations) / sizeof(kMigrations[0]) == kLatestVersion);
     for (int v = cur + 1; v <= kLatestVersion; ++v) {
         Txn t(*this);

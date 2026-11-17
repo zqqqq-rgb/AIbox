@@ -14,6 +14,7 @@ public:
     EventResult detail(int64_t id);
     EventResult set_important(int64_t id, const Json::Value& body);
     EventResult set_disposition(int64_t id, const Json::Value& body);
+    EventResult disposition_history(int64_t id, int64_t before_revision = 0);
 private:
     Db& db_;
 };

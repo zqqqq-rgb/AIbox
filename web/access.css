@@ -12,3 +12,12 @@
 .event-disposition{border-top:1px solid var(--line2);margin:12px 0;padding:10px 0}
 .event-disposition-state{font-weight:600;margin:0 0 8px}
 .event-disposition-actions{flex-wrap:wrap;gap:8px}
+.disposition-record-fields{display:grid;gap:8px;margin-bottom:10px}
+.disposition-record-fields label{display:grid;gap:4px;margin:0}
+.disposition-record-fields textarea{width:100%;resize:vertical;font:inherit}
+.disposition-history{margin-top:12px}
+.disposition-history summary{cursor:pointer}
+.disposition-history-entries{list-style:none;margin:0;padding:0}
+.disposition-history-entry{border-top:1px solid var(--line2);padding:8px 0;overflow-wrap:anywhere}
+.disposition-history-heading{flex-wrap:wrap;gap:8px}
+.disposition-history-note{white-space:pre-wrap}

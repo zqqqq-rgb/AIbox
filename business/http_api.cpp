@@ -866,11 +866,18 @@ void HttpApi::register_routes() {
 
     svr_->Put(R"(/api/events/(\d+)/disposition)", auth_wrap([this](const httplib::Request& req, httplib::Response& res) {
         Json::Value body;
-        if (req.body.size() > 1024 || !parse_task_body(req.body, &body)) {
+        if (req.body.size() > 8192 || !parse_task_body(req.body, &body)) {
             reply(res, 1001, "expected event disposition JSON body");
             return;
         }
         const auto result = EventService(*d_.db).set_disposition(parse_id(req.matches[1].str()), body);
+        reply(res, result.code, result.message, &result.data);
+    }));
+
+    svr_->Get(R"(/api/events/(\d+)/disposition/history)", auth_wrap([this](const httplib::Request& req, httplib::Response& res) {
+        const auto cursor = req.has_param("before_revision") ? parse_id(req.get_param_value("before_revision")) : 0;
+        const auto result = EventService(*d_.db).disposition_history(parse_id(req.matches[1].str()), cursor);
+        res.set_header("Cache-Control", "no-store");
         reply(res, result.code, result.message, &result.data);
     }));
 

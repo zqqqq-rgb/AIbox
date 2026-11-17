@@ -126,7 +126,9 @@ export const api = {
     listEvents: (q, opt) => request('GET', '/api/events?' + new URLSearchParams(q), undefined, opt),
     getEvent: (id, opt) => request('GET', `/api/events/${encodeURIComponent(id)}`, undefined, opt),
     setEventImportant: (id, important, revision, opt) => request('PUT', `/api/events/${encodeURIComponent(id)}/important`, { important, revision }, opt),
-    setEventDisposition: (id, disposition, revision, opt) => request('PUT', `/api/events/${encodeURIComponent(id)}/disposition`, { disposition, revision }, opt),
+    setEventDisposition: (id, body, opt) => request('PUT', `/api/events/${encodeURIComponent(id)}/disposition`, body, opt),
+    getEventDispositionHistory: (id, beforeRevision, opt) => request('GET',
+        `/api/events/${encodeURIComponent(id)}/disposition/history${beforeRevision ? `?before_revision=${encodeURIComponent(beforeRevision)}` : ''}`, undefined, opt),
     listRecordings: (q) => request('GET', '/api/recordings?' + new URLSearchParams(q)),
     // 系统
     getResources: (opt) => request('GET', '/api/resources', undefined, opt),

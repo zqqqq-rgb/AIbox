@@ -61,6 +61,56 @@ void test_disposition() {
     CHECK(history->i64(0) == revision && history->i64(1) > 0);
 }
 
+void test_disposition_records() {
+    Db db(":memory:");
+    REQUIRE(db.migrate() == Db::kSchemaLatest);
+    EventRow event;
+    event.camera_id = 3;
+    const auto id = db.insert_event(event);
+    REQUIRE(id > 0);
+    EventService service(db);
+    const auto empty = service.disposition_history(id);
+    CHECK(empty.code == 0 && empty.data["entries"].isArray() && empty.data["entries"].empty());
+    CHECK(service.disposition_history(0).code == 1001);
+    CHECK(service.disposition_history(id, -1).code == 1001);
+    CHECK(service.disposition_history(999).code == 1002);
+
+    auto body = transition("acknowledged", 0);
+    body["operator_name"] = "  值班员 A  ";
+    body["note"] = "  人员仍在区域内\n已联系现场  ";
+    auto bad = body;
+    bad["operator_name"] = "line\nbreak";
+    CHECK(service.set_disposition(id, bad).code == 1001);
+    bad = body;
+    bad["note"] = std::string(1001, 'x');
+    CHECK(service.set_disposition(id, bad).code == 1001);
+    bad = body;
+    bad["note"] = std::string("one\0two", 7);
+    CHECK(service.set_disposition(id, bad).code == 1001);
+    bad = body;
+    bad["changed_at"] = 1;
+    CHECK(service.set_disposition(id, bad).code == 1001);
+    REQUIRE(service.set_disposition(id, body).code == 0);
+    body["revision"] = 1;
+    CHECK(service.set_disposition(id, body).data["reason_code"] == "unchanged_disposition");
+    body["revision"] = 0;
+    CHECK(service.set_disposition(id, body).data["reason_code"] == "revision_conflict");
+    const auto first = service.disposition_history(id).data["entries"];
+    REQUIRE(first.size() == 1);
+    CHECK(first[0]["from_status"] == "pending" && first[0]["to_status"] == "acknowledged");
+    CHECK(first[0]["operator_name"] == "值班员 A" && first[0]["note"] == "人员仍在区域内\n已联系现场");
+    CHECK(first[0]["changed_at"].asInt64() > 0);
+    for (int64_t revision = 1; revision < 22; ++revision)
+        REQUIRE(service.set_disposition(id, transition(revision % 2 ? "ignored" : "pending", revision)).code == 0);
+    const auto newest = service.disposition_history(id).data;
+    REQUIRE(newest["entries"].size() == 20 && newest["next_before_revision"].asInt64() == 3);
+    CHECK(newest["entries"][0]["revision"].asInt64() == 22);
+    CHECK(newest["entries"][0]["operator_name"].isNull() && newest["entries"][0]["note"].isNull());
+    const auto older = service.disposition_history(id, 3).data;
+    REQUIRE(older["entries"].size() == 2 && older["next_before_revision"].isNull());
+    CHECK(older["entries"][0]["revision"].asInt64() == 2 && older["entries"][1] == first[0]);
+}
+
 void run() {
     Db db(":memory:"); REQUIRE(db.migrate() == Db::kSchemaLatest);
     EventService service(db);
@@ -134,12 +184,22 @@ void run() {
         const auto saved = EventService(reopened).detail(persisted).data;
         CHECK(saved["disposition"] == "acknowledged" || saved["disposition"] == "ignored");
         CHECK(saved["disposition_revision"].asInt64() == 1);
+        REQUIRE(reopened.exec("ALTER TABLE event_disposition_history DROP COLUMN operator_name;"
+                              "ALTER TABLE event_disposition_history DROP COLUMN note;"
+                              "UPDATE schema_meta SET version=10;"));
+        REQUIRE(reopened.migrate() == Db::kSchemaLatest);
+        const auto old_history = EventService(reopened).disposition_history(persisted).data["entries"];
+        REQUIRE(old_history.size() == 1);
+        CHECK(old_history[0]["to_status"] == saved["disposition"]);
+        CHECK(old_history[0]["changed_at"].asInt64() > 0);
+        CHECK(old_history[0]["operator_name"].isNull() && old_history[0]["note"].isNull());
     }
     unlink(file);
 }
 }
 int main() {
-    try { run(); test_disposition(); } catch (const std::exception& error) { fprintf(stderr,"event_detail: %s\n",error.what()); return 1; }
+    try { run(); test_disposition(); test_disposition_records(); }
+    catch (const std::exception& error) { fprintf(stderr,"event_detail: %s\n",error.what()); return 1; }
     if (!g_fail) printf("event_detail PASSED\n");
     return g_fail;
 }
