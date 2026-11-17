@@ -13,6 +13,10 @@ Json::Value transition(const char* status, int64_t revision) {
     Json::Value body;
     body["disposition"] = status;
     body["revision"] = Json::Int64(revision);
+    if (body["disposition"] == "acknowledged") {
+        body["operator_name"] = "Test operator";
+        body["operator_employee_id"] = "OP-01";
+    }
     return body;
 }
 
@@ -77,7 +81,21 @@ void test_disposition_records() {
 
     auto body = transition("acknowledged", 0);
     body["operator_name"] = "  值班员 A  ";
+    body["operator_employee_id"] = "  00042  ";
     body["note"] = "  人员仍在区域内\n已联系现场  ";
+    for (const auto* field : {"operator_name", "operator_employee_id"}) {
+        auto missing = body;
+        missing.removeMember(field);
+        const auto result = service.set_disposition(id, missing);
+        CHECK(result.code == 1001 && result.data["reason_code"] == "operator_identity_required");
+        for (const auto* blank : {"", "  ", u8" \u3000\u00a0 "}) {
+            auto invalid = body;
+            invalid[field] = blank;
+            CHECK(service.set_disposition(id, invalid).code == 1001);
+        }
+    }
+    CHECK(service.detail(id).data["disposition"] == "pending");
+    CHECK(service.disposition_history(id).data["entries"].empty());
     auto bad = body;
     bad["operator_name"] = "line\nbreak";
     CHECK(service.set_disposition(id, bad).code == 1001);
@@ -99,6 +117,7 @@ void test_disposition_records() {
     REQUIRE(first.size() == 1);
     CHECK(first[0]["from_status"] == "pending" && first[0]["to_status"] == "acknowledged");
     CHECK(first[0]["operator_name"] == "值班员 A" && first[0]["note"] == "人员仍在区域内\n已联系现场");
+    CHECK(first[0]["operator_employee_id"] == "00042");
     CHECK(first[0]["changed_at"].asInt64() > 0);
     for (int64_t revision = 1; revision < 22; ++revision)
         REQUIRE(service.set_disposition(id, transition(revision % 2 ? "ignored" : "pending", revision)).code == 0);
@@ -109,6 +128,73 @@ void test_disposition_records() {
     const auto older = service.disposition_history(id, 3).data;
     REQUIRE(older["entries"].size() == 2 && older["next_before_revision"].isNull());
     CHECK(older["entries"][0]["revision"].asInt64() == 2 && older["entries"][1] == first[0]);
+}
+
+void test_event_search() {
+    Db db(":memory:");
+    REQUIRE(db.migrate() == Db::kSchemaLatest);
+    EventService service(db);
+    EventRow event;
+    event.camera_id = 3;
+    event.algo_id = "person";
+    event.type = "person_dwell";
+    event.task_id = 7; event.rule_id = 8; event.task_revision = 1; event.rule_version = 1;
+    event.ts = 2000;
+    const auto oldest = db.insert_event(event);
+    const auto same_time = db.insert_event(event);
+    const auto latest = db.insert_event(event);
+    REQUIRE(oldest > 0 && same_time > oldest && latest > same_time);
+    REQUIRE(service.set_disposition(latest, transition("acknowledged", 0)).code == 0);
+    Json::Value flag;
+    flag["important"] = true; flag["revision"] = 0;
+    REQUIRE(service.set_important(latest, flag).code == 0);
+
+    EventSearchQuery query;
+    query.camera_id = 3;
+    query.task_id = 7;
+    query.algo_id = "person";
+    query.type = "person_dwell";
+    query.from_ms = query.to_ms = 2000;
+    query.disposition = "acknowledged";
+    query.important = true;
+    auto page = service.search(query, "");
+    REQUIRE(page.code == 0 && page.data["items"].size() == 1);
+    CHECK(page.data["items"][0]["id"].asInt64() == latest);
+    CHECK(page.data["next_cursor"].isNull());
+    query.task_id = 999;
+    CHECK(service.search(query, "").data["items"].empty());
+    query.task_id = 7;
+    query.disposition = "pending";
+    query.important = false;
+    query.from_ms = 1000;
+    query.limit = 1;
+
+    page = service.search(query, "");
+    REQUIRE(page.code == 0 && page.data["items"].size() == 1 && page.data["next_cursor"].isString());
+    CHECK(page.data["items"][0]["id"].asInt64() == same_time);
+    const auto cursor = page.data["next_cursor"].asString();
+    const auto new_equal_time = db.insert_event(event);
+    REQUIRE(new_equal_time > latest);
+    // A newly inserted event with an older timestamp would otherwise enter the next page.
+    event.ts = 1500;
+    const auto backdated = db.insert_event(event);
+    REQUIRE(backdated > new_equal_time);
+    page = service.search(query, cursor);
+    REQUIRE(page.code == 0 && page.data["items"].size() == 1);
+    CHECK(page.data["items"][0]["id"].asInt64() == oldest);
+    CHECK(page.data["next_cursor"].isNull());
+    query.limit = 20;
+    CHECK(service.search(query, "").data["items"].size() == 4);
+
+    for (const auto* bad : {"garbage", "v1:4:2000:5", "v1:9:2000:0", "v1:9:9223372036854775808:5", "v1:9:2000:5:2"})
+        CHECK(service.search(query, bad).code == 1001);
+    query.limit = 101;
+    CHECK(service.search(query, "").code == 1001);
+    query.limit = 20;
+    query.from_ms = 2001;
+    CHECK(service.search(query, "").code == 1001);
+    Db unavailable(":memory:");
+    CHECK(EventService(unavailable).search(EventSearchQuery{}, "").code == 5001);
 }
 
 void run() {
@@ -184,7 +270,8 @@ void run() {
         const auto saved = EventService(reopened).detail(persisted).data;
         CHECK(saved["disposition"] == "acknowledged" || saved["disposition"] == "ignored");
         CHECK(saved["disposition_revision"].asInt64() == 1);
-        REQUIRE(reopened.exec("ALTER TABLE event_disposition_history DROP COLUMN operator_name;"
+        REQUIRE(reopened.exec("ALTER TABLE event_disposition_history DROP COLUMN operator_employee_id;"
+                              "ALTER TABLE event_disposition_history DROP COLUMN operator_name;"
                               "ALTER TABLE event_disposition_history DROP COLUMN note;"
                               "UPDATE schema_meta SET version=10;"));
         REQUIRE(reopened.migrate() == Db::kSchemaLatest);
@@ -193,12 +280,21 @@ void run() {
         CHECK(old_history[0]["to_status"] == saved["disposition"]);
         CHECK(old_history[0]["changed_at"].asInt64() > 0);
         CHECK(old_history[0]["operator_name"].isNull() && old_history[0]["note"].isNull());
+        CHECK(old_history[0]["operator_employee_id"].isNull());
+        REQUIRE(reopened.exec("UPDATE event_disposition_history SET operator_name='historical operator',note='historical note';"
+                              "ALTER TABLE event_disposition_history DROP COLUMN operator_employee_id;"
+                              "UPDATE schema_meta SET version=11;"));
+        REQUIRE(reopened.migrate() == Db::kSchemaLatest);
+        const auto migrated_history = EventService(reopened).disposition_history(persisted).data["entries"];
+        REQUIRE(migrated_history.size() == 1);
+        CHECK(migrated_history[0]["operator_name"] == "historical operator" && migrated_history[0]["note"] == "historical note");
+        CHECK(migrated_history[0]["operator_employee_id"].isNull());
     }
     unlink(file);
 }
 }
 int main() {
-    try { run(); test_disposition(); test_disposition_records(); }
+    try { run(); test_disposition(); test_disposition_records(); test_event_search(); }
     catch (const std::exception& error) { fprintf(stderr,"event_detail: %s\n",error.what()); return 1; }
     if (!g_fail) printf("event_detail PASSED\n");
     return g_fail;

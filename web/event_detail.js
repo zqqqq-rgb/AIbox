@@ -38,7 +38,7 @@ function dispositionHistory(id, isCurrent) {
                 const time = h('time', 'small dim', fmtMs(entry.changed_at));
                 heading.append(h('strong', '', `${dispositionLabel(entry.from_status)} → ${dispositionLabel(entry.to_status)}`), time);
                 item.append(heading,
-                    h('p', 'small dim', `填写人：${entry.operator_name ?? '未记录'}`),
+                    h('p', 'small dim', `姓名：${entry.operator_name ?? '未记录'} · 工号：${entry.operator_employee_id ?? '未记录'}`),
                     h('p', 'small disposition-history-note', entry.note ?? '未记录备注'));
                 entries.append(item);
             }
@@ -79,22 +79,43 @@ function dispositionControls(id, detail, { onUpdated, isCurrent }) {
     const author = h('input', 'inp');
     author.type = 'text';
     author.maxLength = 120;
-    const authorLabel = h('label', '', '处理人（填写姓名或工号，选填）');
+    const authorLabel = h('label', '', '姓名');
     authorLabel.append(author);
+    const employee = h('input', 'inp');
+    employee.type = 'text';
+    employee.maxLength = 64;
+    const employeeLabel = h('label', '', '工号');
+    employeeLabel.append(employee);
     const note = h('textarea', 'inp');
     note.rows = 2;
     note.maxLength = 1000;
     const noteLabel = h('label', '', '处置备注（选填）');
     noteLabel.append(note);
-    fields.append(authorLabel, noteLabel);
+    const confirmationHint = h('p', 'small dim');
+    fields.append(authorLabel, employeeLabel, noteLabel, confirmationHint);
     fields.hidden = detail.disposition_history_supported !== true;
+    const supportsEmployeeId = detail.disposition_employee_id_supported === true;
+    employeeLabel.hidden = !supportsEmployeeId;
     const history = detail.disposition_history_supported === true ? dispositionHistory(id, isCurrent) : null;
     section.append(state, fields, buttons, message);
     if (history) section.append(history.panel);
+    let confirmButton = null;
+
+    function canConfirm() {
+        return supportsEmployeeId && author.value.trim() && employee.value.trim();
+    }
+    function syncConfirmation() {
+        if (confirmButton) confirmButton.disabled = !canConfirm();
+    }
+    author.addEventListener('input', syncConfirmation);
+    employee.addEventListener('input', syncConfirmation);
 
     function render() {
         state.textContent = `处置状态：${dispositionLabel(detail.disposition)}`;
         buttons.replaceChildren();
+        confirmButton = null;
+        author.required = employee.required = false;
+        confirmationHint.hidden = true;
         if (!Number.isSafeInteger(detail.disposition_revision) || !Array.isArray(detail.allowed_dispositions)) {
             message.textContent = '当前后端未提供事件处置接口。';
             return;
@@ -103,9 +124,18 @@ function dispositionControls(id, detail, { onUpdated, isCurrent }) {
             const action = dispositions.get(desired)?.action;
             if (!action) continue;
             const button = h('button', 'btn', action);
+            if (desired === 'acknowledged') {
+                confirmButton = button;
+                author.required = employee.required = supportsEmployeeId;
+                confirmationHint.hidden = false;
+                confirmationHint.textContent = supportsEmployeeId
+                    ? '确认事件前请填写姓名和工号。'
+                    : '请更新后端以启用姓名和工号校验。';
+            }
             button.onclick = () => save(desired);
             buttons.append(button);
         }
+        syncConfirmation();
     }
 
     function applyDisposition(result) {
@@ -118,18 +148,25 @@ function dispositionControls(id, detail, { onUpdated, isCurrent }) {
     }
 
     async function save(desired) {
+        if (desired === 'acknowledged' && !canConfirm()) {
+            message.textContent = '请填写姓名和工号后再确认事件。';
+            return;
+        }
         const payload = { disposition: desired, revision: detail.disposition_revision };
         if (history) {
             payload.operator_name = author.value.trim();
+            if (supportsEmployeeId) payload.operator_employee_id = employee.value.trim();
             payload.note = note.value.trim();
             const encoder = new TextEncoder();
-            if (encoder.encode(payload.operator_name).length > 120 || encoder.encode(payload.note).length > 1000) {
-                message.textContent = '内容过长。处理人最多 120 个 UTF-8 字节，备注最多 1000 个 UTF-8 字节。';
+            if (encoder.encode(payload.operator_name).length > 120 ||
+                encoder.encode(payload.operator_employee_id ?? '').length > 64 ||
+                encoder.encode(payload.note).length > 1000) {
+                message.textContent = '内容过长。姓名最多 120、工号最多 64、备注最多 1000 个 UTF-8 字节。';
                 return;
             }
         }
         for (const button of buttons.children) button.disabled = true;
-        author.disabled = note.disabled = true;
+        author.disabled = employee.disabled = note.disabled = true;
         message.textContent = '正在保存处置状态…';
         try {
             const result = await api.setEventDisposition(id, payload, { silent: true });
@@ -160,7 +197,7 @@ function dispositionControls(id, detail, { onUpdated, isCurrent }) {
             };
             buttons.replaceChildren(refresh);
         } finally {
-            author.disabled = note.disabled = false;
+            author.disabled = employee.disabled = note.disabled = false;
         }
     }
     render();

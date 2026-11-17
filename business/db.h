@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -65,6 +66,26 @@ struct EventRow {
     bool important = false;
     int64_t important_revision = 0;
     std::string disposition = "pending";
+};
+
+struct EventCursor {
+    int64_t snapshot_id = 0;
+    int64_t ts = 0;
+    int64_t id = 0;
+};
+
+struct EventSearchQuery {
+    int64_t camera_id = 0, task_id = 0;
+    std::string algo_id, type, disposition;
+    std::optional<int64_t> from_ms, to_ms;
+    std::optional<bool> important;
+    std::optional<EventCursor> cursor;
+    int limit = 20;
+};
+
+struct EventSearchPage {
+    std::vector<EventRow> items;
+    std::optional<EventCursor> next;
 };
 
 struct SegmentRow {
@@ -120,7 +141,7 @@ class Db : public NonCopyable {
 public:
     // 最新 schema 版本（迁移脚本数组的长度；升版只改 db.cpp 的 kLatestVersion，
     // 本常量同步维护——测试/调用方断言 migrate() 返回值用它，勿硬编码）
-    static constexpr int kSchemaLatest = 11;
+    static constexpr int kSchemaLatest = 13;
 
     // path 传 ":memory:" 即内存库（单测）；否则为文件库（目录须已存在）
     explicit Db(const std::string& path);
@@ -238,6 +259,7 @@ public:
 
     // ---- events ----
     int64_t insert_event(const EventRow& r);
+    bool search_events(const EventSearchQuery& query, EventSearchPage& page);
     // 事件快照回填（截图异步完成后的第二步写入；失败不影响事件本体）
     bool update_event_snapshot(int64_t event_id, const std::string& path);
     // 过滤参数取"哨兵零值"关闭：camera_id<=0 / algo_id 空 / from/to 为 0

@@ -98,6 +98,8 @@ void run() {
     REQUIRE(result); CHECK(result->status == 401);
     result = client.Get("/api/events/1/disposition/history");
     REQUIRE(result); CHECK(result->status == 401);
+    result = client.Get("/api/events/search?limit=1");
+    REQUIRE(result); CHECK(result->status == 401);
     result = client.Post("/api/auth/login", "{\"token\":\"wrong\"}", "application/json"); REQUIRE(result); CHECK(result->status == 401);
     result = client.Post("/api/auth/login", {{"Origin", "https://evil.example.com"}}, "{\"token\":\"configured-test-secret\"}", "application/json");
     REQUIRE(result); CHECK(result->status == 403);

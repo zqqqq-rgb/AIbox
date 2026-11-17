@@ -6,6 +6,7 @@
 #include <chrono>
 #include <algorithm>
 #include <set>
+#include <variant>
 
 #include "common/Log.h"
 #include "config_compiler.h"
@@ -191,6 +192,13 @@ const char* kMigrationV11 =
     "ALTER TABLE event_disposition_history ADD COLUMN operator_name TEXT;"
     "ALTER TABLE event_disposition_history ADD COLUMN note TEXT;";
 
+const char* kMigrationV12 =
+    "ALTER TABLE event_disposition_history ADD COLUMN operator_employee_id TEXT;";
+
+const char* kMigrationV13 =
+    "CREATE INDEX IF NOT EXISTS idx_events_ts_id ON events(ts DESC,id DESC);"
+    "CREATE INDEX IF NOT EXISTS idx_event_sources_task ON event_rule_sources(task_id,event_id);";
+
 }  // namespace
 
 // ---- open / migrate ----
@@ -243,7 +251,7 @@ int Db::migrate() {
     static const char* const kMigrations[] = {kMigrationV1, kMigrationV2,
                                               kMigrationV3, kMigrationV4, kMigrationV5, kMigrationV6,
                                               kMigrationV7, kMigrationV8, kMigrationV9, kMigrationV10,
-                                              kMigrationV11};
+                                              kMigrationV11, kMigrationV12, kMigrationV13};
     static_assert(sizeof(kMigrations) / sizeof(kMigrations[0]) == kLatestVersion);
     for (int v = cur + 1; v <= kLatestVersion; ++v) {
         Txn t(*this);
@@ -973,21 +981,104 @@ int64_t Db::insert_event(const EventRow& r) {
     return txn.commit() ? id : -1;
 }
 
+namespace {
+
+constexpr const char* kEventSelect =
+    "SELECT e.id, e.camera_id, e.algo_id, e.type, e.ts, e.snapshot_path, e.targets_json, e.reported, "
+    "s.task_id, s.rule_id, s.task_revision, s.rule_version, e.important, e.important_revision, e.disposition "
+    "FROM events e LEFT JOIN event_rule_sources s ON s.event_id=e.id WHERE 1=1";
+
+EventRow read_event_row(const Db::Stmt& row) {
+    EventRow event;
+    event.id = row.i64(0);
+    event.camera_id = row.i64(1);
+    event.algo_id = row.text(2);
+    event.type = row.text(3);
+    event.ts = row.i64(4);
+    event.snapshot_path = row.text(5);
+    event.targets_json = row.text(6);
+    event.reported = row.i64(7) != 0;
+    event.task_id = row.i64(8);
+    event.rule_id = row.i64(9);
+    event.task_revision = row.i64(10);
+    event.rule_version = row.i64(11);
+    event.important = row.i64(12) != 0;
+    event.important_revision = row.i64(13);
+    event.disposition = row.text(14);
+    return event;
+}
+
+}  // namespace
+
+bool Db::search_events(const EventSearchQuery& query, EventSearchPage& page) {
+    if (query.limit < 1 || query.limit > 100) return false;
+    Txn read(*this);
+    if (!read.active()) return false;
+    // Freeze the insertion boundary so backdated events inserted between pages do not join the scan.
+    int64_t snapshot_id = 0;
+    if (query.cursor) {
+        snapshot_id = query.cursor->snapshot_id;
+    } else {
+        auto max_id = prepare("SELECT COALESCE(MAX(id),0) FROM events;");
+        if (!max_id || !max_id->step()) return false;
+        snapshot_id = max_id->i64(0);
+    }
+    std::string sql = kEventSelect;
+    using Binding = std::variant<int64_t, std::string>;
+    std::vector<Binding> values;
+    auto add = [&](const char* clause, Binding value) {
+        sql += clause;
+        values.push_back(std::move(value));
+    };
+    add(" AND e.id<=?", snapshot_id);
+    if (query.camera_id) add(" AND e.camera_id=?", query.camera_id);
+    if (query.task_id) add(" AND s.task_id=?", query.task_id);
+    if (!query.algo_id.empty()) add(" AND e.algo_id=?", query.algo_id);
+    if (!query.type.empty()) add(" AND e.type=?", query.type);
+    if (!query.disposition.empty()) add(" AND e.disposition=?", query.disposition);
+    if (query.important.has_value()) add(" AND e.important=?", int64_t(*query.important));
+    if (query.from_ms) add(" AND e.ts>=?", *query.from_ms);
+    if (query.to_ms) add(" AND e.ts<=?", *query.to_ms);
+    if (query.cursor) {
+        add(" AND (e.ts,e.id)<(?,?)", query.cursor->ts);
+        values.emplace_back(query.cursor->id);
+    }
+    add(" ORDER BY e.ts DESC,e.id DESC LIMIT ?;", int64_t(query.limit) + 1);
+    auto row = prepare(sql);
+    if (!row) return false;
+    int index = 1;
+    for (const auto& value : values) {
+        if (!std::visit([&](const auto& v) { return row->bind(index, v); }, value)) return false;
+        ++index;
+    }
+    EventSearchPage result;
+    while (row->step()) {
+        if (result.items.size() == static_cast<size_t>(query.limit)) {
+            const auto& last = result.items.back();
+            result.next = EventCursor{snapshot_id, last.ts, last.id};
+            break;
+        }
+        result.items.push_back(read_event_row(*row));
+    }
+    if (!last_error().empty()) return false;
+    row.reset();
+    if (!read.commit()) return false;
+    page = std::move(result);
+    return true;
+}
+
 std::vector<EventRow> Db::list_events(int64_t camera_id, const std::string& algo_id,
                                       int64_t from_ms, int64_t to_ms, int limit) {
     std::lock_guard<std::recursive_mutex> lk(mu_);
     std::vector<EventRow> rows;
     // 自动编号 ?（按出现顺序 1,2,3...）与绑定顺序严格一致——禁止固定 ?N 跳号：
     // 条件过滤缺席时 LIMIT ?5 与实际绑定序错位（板上实测踩中：LIMIT 落 NULL）
-    std::string sql =
-        "SELECT e.id, camera_id, algo_id, type, ts, snapshot_path, targets_json, reported, "
-        "s.task_id, s.rule_id, s.task_revision, s.rule_version, e.important, e.important_revision, e.disposition "
-        "FROM events e LEFT JOIN event_rule_sources s ON s.event_id=e.id WHERE 1=1";
+    std::string sql = kEventSelect;
     if (camera_id > 0) sql += " AND camera_id=?";
     if (!algo_id.empty()) sql += " AND algo_id=?";
     if (from_ms > 0) sql += " AND ts>=?";
     if (to_ms > 0) sql += " AND ts<=?";
-    sql += " ORDER BY ts DESC LIMIT ?;";
+    sql += " ORDER BY e.ts DESC,e.id DESC LIMIT ?;";
     auto st = prepare(sql);
     if (!st) return rows;
     int idx = 1;
@@ -996,22 +1087,7 @@ std::vector<EventRow> Db::list_events(int64_t camera_id, const std::string& algo
     if (from_ms > 0 && !st->bind(idx++, from_ms)) return rows;
     if (to_ms > 0 && !st->bind(idx++, to_ms)) return rows;
     if (!st->bind(idx, static_cast<int64_t>(limit))) return rows;
-    while (st->step()) {
-        EventRow r;
-        r.id = st->i64(0);
-        r.camera_id = st->i64(1);
-        r.algo_id = st->text(2);
-        r.type = st->text(3);
-        r.ts = st->i64(4);
-        r.snapshot_path = st->is_null(5) ? "" : st->text(5);
-        r.targets_json = st->is_null(6) ? "" : st->text(6);
-        r.reported = st->i64(7) != 0;
-        r.task_id = st->i64(8); r.rule_id = st->i64(9);
-        r.task_revision = st->i64(10); r.rule_version = st->i64(11);
-        r.important = st->i64(12) != 0; r.important_revision = st->i64(13);
-        r.disposition = st->text(14);
-        rows.push_back(std::move(r));
-    }
+    while (st->step()) rows.push_back(read_event_row(*st));
     return rows;
 }
 

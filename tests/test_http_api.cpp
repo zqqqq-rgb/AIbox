@@ -368,7 +368,11 @@ void test_events() {
     res = cli.Put(important_path.c_str(), R"({"important":false,"revision":1})", "application/json");
     CHECK(res && parse_json(res->body)["code"].asInt() == 0);
     const auto disposition_path = "/api/events/" + std::to_string(event_id) + "/disposition";
-    res = cli.Put(disposition_path.c_str(), R"({"disposition":"acknowledged","revision":0,"operator_name":"OP-42","note":"checked"})", "application/json");
+    res = cli.Put(disposition_path.c_str(), R"({"disposition":"acknowledged","revision":0,"operator_name":"Operator"})", "application/json");
+    CHECK(res && parse_json(res->body)["data"]["reason_code"] == "operator_identity_required");
+    res = cli.Put(disposition_path.c_str(), R"({"disposition":"acknowledged","revision":0,"operator_employee_id":"0042"})", "application/json");
+    CHECK(res && parse_json(res->body)["data"]["reason_code"] == "operator_identity_required");
+    res = cli.Put(disposition_path.c_str(), R"({"disposition":"acknowledged","revision":0,"operator_name":"Operator","operator_employee_id":"0042","note":"checked"})", "application/json");
     CHECK(res && parse_json(res->body)["code"] == 0);
     CHECK(res && parse_json(res->body)["data"]["disposition_revision"].asInt64() == 1);
     res = cli.Put(disposition_path.c_str(), R"({"disposition":"resolved","revision":1})", "application/json");
@@ -379,10 +383,23 @@ void test_events() {
     CHECK(res && res->get_header_value("Cache-Control") == "no-store");
     if (res) {
         const auto entries = parse_json(res->body)["data"]["entries"];
-        CHECK(entries.size() == 1 && entries[0]["operator_name"] == "OP-42" && entries[0]["note"] == "checked");
+        CHECK(entries.size() == 1 && entries[0]["operator_name"] == "Operator" && entries[0]["note"] == "checked");
+        CHECK(entries.size() == 1 && entries[0]["operator_employee_id"] == "0042");
     }
     res = cli.Get((disposition_path + "/history?before_revision=0").c_str());
     CHECK(res && parse_json(res->body)["code"] == 1001);
+    res = cli.Get("/api/events/search?camera_id=1&type=REGION_IN&important=false&disposition=acknowledged&from=5000&to=5000");
+    CHECK(res && res->get_header_value("Cache-Control") == "no-store");
+    if (res) {
+        const auto data = parse_json(res->body)["data"];
+        CHECK(data["items"].size() == 1 && data["items"][0]["id"].asInt64() == event_id);
+        CHECK(data["next_cursor"].isNull());
+    }
+    for (const auto* suffix : {"?camera_id=0", "?task_id=-2", "?limit=101", "?limit=0", "?limit=1&limit=2",
+            "?from=50&to=49", "?cursor=invalid", "?important=maybe", "?disposition=closed", "?unknown=1"}) {
+        res = cli.Get((std::string("/api/events/search") + suffix).c_str());
+        CHECK(res && parse_json(res->body)["code"] == 1001);
+    }
     CHECK(r.eng.commands() == commands);
 }
 

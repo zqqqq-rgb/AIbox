@@ -1,6 +1,8 @@
 #include "event_service.h"
+#include <charconv>
 #include <chrono>
 #include <limits>
+#include <string_view>
 
 namespace aibox {
 namespace biz {
@@ -9,6 +11,57 @@ namespace {
 // Status values and transitions are owned by the service. The UI uses the returned options.
 constexpr const char* kStatuses[] = {"pending", "acknowledged", "processing", "resolved", "ignored"};
 constexpr Json::ArrayIndex kHistoryPageSize = 20;
+
+bool known_status(std::string_view value) {
+    for (const auto* status : kStatuses) if (value == status) return true;
+    return false;
+}
+
+bool parse_cursor(std::string_view value, EventCursor& cursor) {
+    if (value.size() > 64 || value.substr(0, 3) != "v1:") return false;
+    value.remove_prefix(3);
+    auto read_part = [&](int64_t& out, bool last) {
+        const auto colon = value.find(':');
+        if ((colon == std::string_view::npos) != last) return false;
+        const auto part = value.substr(0, colon);
+        const auto end = part.data() + part.size();
+        const auto parsed = std::from_chars(part.data(), end, out);
+        if (parsed.ec != std::errc{} || parsed.ptr != end) return false;
+        if (!last) value.remove_prefix(colon + 1);
+        return true;
+    };
+    return read_part(cursor.snapshot_id, false) && read_part(cursor.ts, false) &&
+        read_part(cursor.id, true) && cursor.id > 0 && cursor.snapshot_id >= cursor.id;
+}
+
+Json::Value event_list_items(const std::vector<EventRow>& events) {
+    Json::Value items(Json::arrayValue);
+    Json::CharReaderBuilder builder;
+    auto reader = std::unique_ptr<Json::CharReader>(builder.newCharReader());
+    for (const auto& event : events) {
+        Json::Value item;
+        item["id"] = Json::Int64(event.id);
+        item["camera_id"] = Json::Int64(event.camera_id);
+        item["algo_id"] = event.algo_id;
+        item["task_id"] = Json::Int64(event.task_id);
+        item["rule_id"] = Json::Int64(event.rule_id);
+        item["task_revision"] = Json::Int64(event.task_revision);
+        item["rule_version"] = Json::Int64(event.rule_version);
+        item["important"] = event.important;
+        item["important_revision"] = Json::Int64(event.important_revision);
+        item["disposition"] = event.disposition;
+        item["type"] = event.type;
+        item["ts"] = Json::Int64(event.ts);
+        if (!event.snapshot_path.empty()) item["snapshot"] = event.snapshot_path;
+        Json::Value targets;
+        std::string errors;
+        const auto& text = event.targets_json;
+        if (reader->parse(text.data(), text.data() + text.size(), &targets, &errors))
+            item["targets"] = std::move(targets);
+        items.append(std::move(item));
+    }
+    return items;
+}
 
 Json::Value next_dispositions(const std::string& status) {
     Json::Value allowed(Json::arrayValue);
@@ -37,6 +90,29 @@ int64_t now_ms() {
         std::chrono::system_clock::now().time_since_epoch()).count();
 }
 
+std::string_view trim_history_text(std::string_view value) {
+    // Match browser trim for UTF-8 input, including ideographic space (U+3000).
+    constexpr std::string_view spaces[] = {
+        " ", "\t", "\r", "\n", u8"\u00a0", u8"\u1680", u8"\u2000", u8"\u2001", u8"\u2002",
+        u8"\u2003", u8"\u2004", u8"\u2005", u8"\u2006", u8"\u2007", u8"\u2008", u8"\u2009",
+        u8"\u200a", u8"\u2028", u8"\u2029", u8"\u202f", u8"\u205f", u8"\u3000", u8"\ufeff",
+    };
+    for (bool removed = true; removed;) {
+        removed = false;
+        for (auto space : spaces) {
+            if (value.substr(0, space.size()) == space) {
+                value.remove_prefix(space.size());
+                removed = true;
+            }
+            if (value.size() >= space.size() && value.substr(value.size() - space.size()) == space) {
+                value.remove_suffix(space.size());
+                removed = true;
+            }
+        }
+    }
+    return value;
+}
+
 bool read_history_text(const Json::Value& body, const char* key, size_t max_bytes,
                        bool multiline, std::string& out) {
     if (!body.isMember(key)) return true;
@@ -47,13 +123,38 @@ bool read_history_text(const Json::Value& body, const char* key, size_t max_byte
         if ((c < 32 || c == 127) && !(multiline && (c == '\n' || c == '\r' || c == '\t')))
             return false;
     }
-    const auto start = value.find_first_not_of(" \t\r\n");
-    if (start != std::string::npos)
-        out = value.substr(start, value.find_last_not_of(" \t\r\n") - start + 1);
+    out = trim_history_text(value);
     return true;
 }
 
 }  // namespace
+
+Json::Value EventService::list(int64_t camera_id, const std::string& algo_id, int64_t from, int64_t to, int limit) {
+    return event_list_items(db_.list_events(camera_id, algo_id, from, to, limit));
+}
+
+EventResult EventService::search(EventSearchQuery query, const std::string& cursor) {
+    if (query.camera_id < 0 || query.task_id < 0 || query.limit < 1 || query.limit > 100 ||
+        query.algo_id.size() > 128 || query.type.size() > 256 ||
+        (!query.disposition.empty() && !known_status(query.disposition)) ||
+        (query.from_ms && query.to_ms && *query.from_ms > *query.to_ms))
+        return {1001, "invalid event search filters", {}};
+    if (!cursor.empty()) {
+        EventCursor parsed;
+        if (!parse_cursor(cursor, parsed)) return {1001, "invalid event cursor", {}};
+        query.cursor = parsed;
+    }
+    EventSearchPage page;
+    if (!db_.search_events(query, page)) return {5001, "event search failed", {}};
+    Json::Value data;
+    data["items"] = event_list_items(page.items);
+    data["next_cursor"] = Json::Value();
+    if (page.next) {
+        const auto& next = *page.next;
+        data["next_cursor"] = "v1:" + std::to_string(next.snapshot_id) + ":" + std::to_string(next.ts) + ":" + std::to_string(next.id);
+    }
+    return {0, "ok", data};
+}
 
 EventResult EventService::detail(int64_t id) {
     if (id <= 0) return {1001, "expected positive event id", {}};
@@ -82,6 +183,7 @@ EventResult EventService::detail(int64_t id) {
     data["important_revision"] = Json::Int64(row->i64(13));
     add_disposition(data, row->text(14), row->i64(15));
     data["disposition_history_supported"] = true;
+    data["disposition_employee_id_supported"] = true;
     const char* sources[] = {"task_id", "rule_id", "task_revision", "rule_version"};
     for (int i = 0; i < 4; ++i) data[sources[i]] = Json::Int64(row->i64(8 + i));
 
@@ -141,17 +243,22 @@ EventResult EventService::set_disposition(int64_t id, const Json::Value& body) {
         !is_revision(body["revision"]))
         return {1001, "expected event id, disposition and nonnegative integer revision", {}};
     for (const auto& key : body.getMemberNames()) {
-        if (key != "disposition" && key != "revision" && key != "operator_name" && key != "note")
+        if (key != "disposition" && key != "revision" && key != "operator_name" &&
+            key != "operator_employee_id" && key != "note")
             return {1001, "unknown event disposition field", {}};
     }
-    std::string operator_name, note;
+    std::string operator_name, employee_id, note;
     if (!read_history_text(body, "operator_name", 120, false, operator_name) ||
+        !read_history_text(body, "operator_employee_id", 64, false, employee_id) ||
         !read_history_text(body, "note", 1000, true, note))
-        return {1001, "invalid operator name (120 bytes) or note (1000 bytes)", {}};
+        return {1001, "invalid operator name (120 bytes), employee ID (64 bytes), or note (1000 bytes)", {}};
     const auto desired = body["disposition"].asString();
-    bool valid_status = false;
-    for (const auto* status : kStatuses) if (desired == status) valid_status = true;
-    if (!valid_status) return {1001, "unknown event disposition", {}};
+    if (!known_status(desired)) return {1001, "unknown event disposition", {}};
+    if (desired == "acknowledged" && (operator_name.empty() || employee_id.empty())) {
+        Json::Value data;
+        data["reason_code"] = "operator_identity_required";
+        return {1001, "operator name and employee ID are required to acknowledge an event", data};
+    }
 
     Db::Txn txn(db_, Db::Txn::Mode::Immediate);
     if (!txn.active()) return {5001, "event disposition transaction failed", {}};
@@ -173,7 +280,7 @@ EventResult EventService::set_disposition(int64_t id, const Json::Value& body) {
         return {1003, "event disposition changed; reload detail", data};
     }
     if (previous == desired) {
-        if (!operator_name.empty() || !note.empty()) {
+        if (!operator_name.empty() || !employee_id.empty() || !note.empty()) {
             data["reason_code"] = "unchanged_disposition";
             return {1003, "operator and note require a disposition change", data};
         }
@@ -195,11 +302,12 @@ EventResult EventService::set_disposition(int64_t id, const Json::Value& body) {
         !update->bind(3, id) || !update->run() || db_.changes() != 1)
         return {5001, "event disposition update failed", {}};
     auto history = db_.prepare("INSERT INTO event_disposition_history"
-                               "(event_id,revision,from_status,to_status,changed_at,operator_name,note) "
-                               "VALUES(?1,?2,?3,?4,?5,NULLIF(?6,''),NULLIF(?7,''));");
+                               "(event_id,revision,from_status,to_status,changed_at,operator_name,operator_employee_id,note) "
+                               "VALUES(?1,?2,?3,?4,?5,NULLIF(?6,''),NULLIF(?7,''),NULLIF(?8,''));");
     if (!history || !history->bind(1, id) || !history->bind(2, revision + 1) ||
         !history->bind(3, previous) || !history->bind(4, desired) || !history->bind(5, now_ms()) ||
-        !history->bind(6, operator_name) || !history->bind(7, note) || !history->run())
+        !history->bind(6, operator_name) || !history->bind(7, employee_id) ||
+        !history->bind(8, note) || !history->run())
         return {5001, "event disposition history failed", {}};
     if (!txn.commit()) return {5001, "event disposition commit failed", {}};
     add_disposition(data, desired, revision + 1);
@@ -211,7 +319,7 @@ EventResult EventService::disposition_history(int64_t id, int64_t before_revisio
     if (id <= 0 || before_revision < 0) return {1001, "invalid event id or history cursor", {}};
     Db::Txn txn(db_);
     if (!txn.active()) return {5001, "event history transaction failed", {}};
-    auto row = db_.prepare("SELECT e.id,h.revision,h.from_status,h.to_status,h.changed_at,h.operator_name,h.note "
+    auto row = db_.prepare("SELECT e.id,h.revision,h.from_status,h.to_status,h.changed_at,h.operator_name,h.note,h.operator_employee_id "
                            "FROM (SELECT 1) anchor LEFT JOIN events e ON e.id=?1 "
                            "LEFT JOIN event_disposition_history h ON h.event_id=e.id AND h.revision<=?2 "
                            "ORDER BY h.revision DESC LIMIT ?3;");
@@ -236,6 +344,7 @@ EventResult EventService::disposition_history(int64_t id, int64_t before_revisio
         entry["changed_at"] = Json::Int64(row->i64(4));
         entry["operator_name"] = row->is_null(5) ? Json::Value() : Json::Value(row->text(5));
         entry["note"] = row->is_null(6) ? Json::Value() : Json::Value(row->text(6));
+        entry["operator_employee_id"] = row->is_null(7) ? Json::Value() : Json::Value(row->text(7));
         entries.append(std::move(entry));
     } while (row->step());
     if (!db_.last_error().empty()) return {5001, "event history query failed", {}};

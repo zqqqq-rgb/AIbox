@@ -124,6 +124,7 @@ export const api = {
     rollbackAlgo: (id) => request('POST', `/api/algorithms/${id}/rollback`, undefined, { silent: true }),
     // 事件 / 录像（from/to 单位均为 ms——db 层 start_ts=ZLM 秒×1000，events.ts=ms）
     listEvents: (q, opt) => request('GET', '/api/events?' + new URLSearchParams(q), undefined, opt),
+    searchEvents: (q, opt) => request('GET', '/api/events/search?' + new URLSearchParams(q), undefined, opt),
     getEvent: (id, opt) => request('GET', `/api/events/${encodeURIComponent(id)}`, undefined, opt),
     setEventImportant: (id, important, revision, opt) => request('PUT', `/api/events/${encodeURIComponent(id)}/important`, { important, revision }, opt),
     setEventDisposition: (id, body, opt) => request('PUT', `/api/events/${encodeURIComponent(id)}/disposition`, body, opt),

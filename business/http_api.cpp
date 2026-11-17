@@ -7,6 +7,7 @@
 
 #include <algorithm>
 #include <cctype>
+#include <charconv>
 #include <chrono>
 #include <cstdlib>
 #include <cstdio>
@@ -43,6 +44,32 @@ int64_t parse_id(const std::string& text) {
         value=value*10+(ch-'0');
     }
     return value>0?value:-1;
+}
+
+bool parse_event_search(const httplib::Request& req, EventSearchQuery& query, std::string& cursor) {
+    for (const auto& [key, value] : req.params) {
+        if (req.params.count(key) != 1 || value.empty()) return false;
+        if (key == "algo_id") query.algo_id = value;
+        else if (key == "type") query.type = value;
+        else if (key == "disposition") query.disposition = value;
+        else if (key == "cursor") cursor = value;
+        else if (key == "important") {
+            if (value != "true" && value != "false") return false;
+            query.important = value == "true";
+        } else {
+            int64_t number = 0;
+            const auto end = value.data() + value.size();
+            const auto parsed = std::from_chars(value.data(), end, number);
+            if (parsed.ec != std::errc{} || parsed.ptr != end) return false;
+            if (key == "from") query.from_ms = number;
+            else if (key == "to") query.to_ms = number;
+            else if (key == "camera_id" && number > 0) query.camera_id = number;
+            else if (key == "task_id" && number > 0) query.task_id = number;
+            else if (key == "limit" && number >= 1 && number <= 100) query.limit = static_cast<int>(number);
+            else return false;
+        }
+    }
+    return true;
 }
 
 int64_t steady_ms() {
@@ -881,6 +908,18 @@ void HttpApi::register_routes() {
         reply(res, result.code, result.message, &result.data);
     }));
 
+    svr_->Get("/api/events/search", auth_wrap([this](const httplib::Request& req, httplib::Response& res) {
+        EventSearchQuery query;
+        std::string cursor;
+        if (!parse_event_search(req, query, cursor)) {
+            reply(res, 1001, "invalid event search parameters");
+            return;
+        }
+        const auto result = EventService(*d_.db).search(std::move(query), cursor);
+        res.set_header("Cache-Control", "no-store");
+        reply(res, result.code, result.message, &result.data);
+    }));
+
     // ---- 9. GET /api/events ----
     svr_->Get("/api/events",
               auth_wrap([this](const httplib::Request& req, httplib::Response& res) {
@@ -896,35 +935,7 @@ void HttpApi::register_routes() {
         const int limit = req.has_param("limit")
                               ? std::atoi(req.get_param_value("limit").c_str())
                               : 100;
-        const auto evs = d_.db->list_events(camera_id, algo, from, to, limit);
-        Json::Value arr(Json::arrayValue);
-        for (const auto& e : evs) {
-            Json::Value o(Json::objectValue);
-            o["id"] = e.id;
-            o["camera_id"] = e.camera_id;
-            o["algo_id"] = e.algo_id;
-            o["task_id"] = Json::Int64(e.task_id); o["rule_id"] = Json::Int64(e.rule_id);
-            o["task_revision"] = Json::Int64(e.task_revision); o["rule_version"] = Json::Int64(e.rule_version);
-            o["important"] = e.important;
-            o["important_revision"] = Json::Int64(e.important_revision);
-            o["disposition"] = e.disposition;
-            o["type"] = e.type;
-            o["ts"] = e.ts;
-            if (!e.snapshot_path.empty()) o["snapshot"] = e.snapshot_path;
-            Json::CharReaderBuilder b;
-            std::unique_ptr<Json::CharReader> rd(b.newCharReader());
-            Json::Value targets;
-            std::string errs;
-            if (rd->parse(e.targets_json.data(),
-                          e.targets_json.data() + e.targets_json.size(), &targets,
-                          &errs)) {
-                o["targets"] = targets;
-            }
-            arr.append(o);
-        }
-        Json::Value data;
-        data = arr;
-        reply_data(res, data);
+        reply_data(res, EventService(*d_.db).list(camera_id, algo, from, to, limit));
     }));
 
     // ---- 10. GET /api/resources（get_metrics 透传 + 本机 CPU/内存/RSS 实测）----

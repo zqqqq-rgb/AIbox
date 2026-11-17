@@ -1047,7 +1047,16 @@ async function pageEvents() {
     const f = h('div', 'filters');
     const selCam = document.createElement('select'); selCam.className = 'sel';
     selCam.appendChild(new Option('全部摄像头', '0'));
-    const inpAlgo = h('input', 'inp'); inpAlgo.placeholder = 'algo_id';
+    const inpAlgo = h('input', 'inp'); inpAlgo.placeholder = '如 person'; inpAlgo.maxLength = 128;
+    const inpTask = h('input', 'inp'); inpTask.inputMode = 'numeric'; inpTask.maxLength = 19;
+    inpTask.placeholder = '如 7';
+    const inpType = h('input', 'inp'); inpType.placeholder = '如 person_dwell'; inpType.maxLength = 256;
+    const selDisposition = h('select', 'sel');
+    selDisposition.append(new Option('全部状态', ''));
+    for (const status of ['pending', 'acknowledged', 'processing', 'resolved', 'ignored'])
+        selDisposition.append(new Option(dispositionLabel(status), status));
+    const selImportant = h('select', 'sel');
+    selImportant.append(new Option('全部事件', ''), new Option('仅重要', 'true'), new Option('仅普通', 'false'));
     const inpFrom = h('input', 'inp'); inpFrom.type = 'datetime-local';
     const inpTo = h('input', 'inp'); inpTo.type = 'datetime-local';
     const qBtn = h('button', 'btn btn-acc', '查询');
@@ -1059,9 +1068,22 @@ async function pageEvents() {
     liveLbl.className = 'chk small';
     liveLbl.appendChild(liveChk);
     liveLbl.appendChild(document.createTextNode('实时'));
-    f.append(selCam, inpAlgo, inpFrom, inpTo, qBtn, liveLbl);
+    function filterField(label, control) {
+        const field = h('label', 'event-filter-field', label);
+        control.setAttribute('aria-label', label);
+        field.append(control);
+        return field;
+    }
+    f.classList.add('event-filters');
+    f.append(filterField('摄像头', selCam), filterField('算法 ID', inpAlgo), filterField('任务 ID', inpTask),
+        filterField('事件类型', inpType), filterField('处置状态', selDisposition), filterField('重要标记', selImportant),
+        filterField('开始时间', inpFrom), filterField('结束时间', inpTo), qBtn, liveLbl);
+    const liveList = h('div', 'list');
     const histList = h('div', 'list');
-    histCol.append(f, histList);
+    const status = h('p', 'small dim'); status.setAttribute('aria-live', 'polite');
+    const moreButton = h('button', 'btn', '加载更早事件'); moreButton.hidden = true;
+    const pages = h('div', 'row event-pages'); pages.append(status, moreButton);
+    histCol.append(f, liveList, histList, pages);
     wrap.appendChild(histCol);
     $view().appendChild(wrap);
 
@@ -1088,16 +1110,16 @@ async function pageEvents() {
             row.appendChild(importantBadge);
             if (j.disposition) row.appendChild(h('span', 'ev-rule event-disposition-badge', dispositionLabel(j.disposition)));
         }
+        const type = h('span', 'ev-rule', j.type.endsWith('_region_in')
+            ? '进入报警'
+            : j.type.endsWith('_dwell') ? '停留报警' : j.type);
+        type.title = j.type;
         row.append(
             h('span', 'mono dim', fmtMs(j.ts)),
             h('span', 'mono', `cam${j.id}`),
             h('span', 'dim', camName[j.id] || '—'),  // 名称（列表预取，未命中显示占位）
             h('span', 'ev-algo', j.algo),
-            // 规则类型：event_type 由 engine 按 {algo}_{rule_type} 兜底生成，
-            // 尾段推导 region_in/dwell；自定义 event_type 不匹配时显示原值
-            h('span', 'ev-rule', j.type.endsWith('_region_in')
-                ? '进入报警'
-                : j.type.endsWith('_dwell') ? '停留报警' : j.type),
+            type,
             j.snap ? h('span', 'ok-txt', '有快照') : h('span', 'dim', '无快照'));
         // class 芯片：targets 的触发类别去重（每类一个，颜色随 classOf 主题）
         const seen = new Set();
@@ -1122,14 +1144,24 @@ async function pageEvents() {
                 onUpdated(detail) {
                     if (!alive) return;
                     const selector = `[data-event-id="${j.event_id}"]`;
-                    if (typeof detail.important === 'boolean') {
-                        for (const item of histList.querySelectorAll(`${selector} .event-important-badge`))
-                            item.hidden = !detail.important;
+                    for (const item of histCol.querySelectorAll(selector)) {
+                        if (typeof detail.important === 'boolean') {
+                            if (activeFilters.important !== undefined && String(detail.important) !== activeFilters.important) {
+                                item.remove();
+                                continue;
+                            }
+                            item.querySelector('.event-important-badge').hidden = !detail.important;
+                        }
+                        if (typeof detail.disposition === 'string') {
+                            if (activeFilters.disposition && detail.disposition !== activeFilters.disposition) {
+                                item.remove();
+                                continue;
+                            }
+                            const label = item.querySelector('.event-disposition-badge');
+                            if (label) label.textContent = dispositionLabel(detail.disposition);
+                        }
                     }
-                    if (typeof detail.disposition === 'string') {
-                        for (const item of histList.querySelectorAll(`${selector} .event-disposition-badge`))
-                            item.textContent = dispositionLabel(detail.disposition);
-                    }
+                    if (!searching) showResultCount();
                 },
             });
         };
@@ -1137,84 +1169,126 @@ async function pageEvents() {
         return row;
     }
 
-    // 历史检索：from/to 为 datetime-local → ms（db.list_events 的 from/to 单位 ms）
-    const dloc2ms = (v) => (v ? new Date(v).getTime() : 0);
-    async function query() {
-        tri(histList, 'loading');
-        const evs = await api.listEvents({
-            camera_id: Number(selCam.value) || 0,
-            algo_id: inpAlgo.value.trim(),
-            from: dloc2ms(inpFrom.value),
-            to: dloc2ms(inpTo.value),
-            limit: 100,
-        });
-        if (!alive) return;
-        histList.innerHTML = '';
-        if (!evs.length) { tri(histList, 'empty', { emptyText: '无匹配事件' }); return; }
-        for (const e of evs) {
-            // 列表沿用 WS 的 id=摄像头 ID；单独保留 event_id 查询持久化详情。
-            histList.appendChild(eventRow({
-                ...e,
-                event_id: e.id,
-                id: e.camera_id,
-                algo: e.algo_id,
-                ts: e.ts,
-                snap: e.snapshot,
-            }));
+    const fromStored = (event) => ({ ...event, event_id: event.id, id: event.camera_id, algo: event.algo_id, snap: event.snapshot });
+    let activeFilters = {}, nextCursor = null, generation = 0, searching = false;
+
+    function readFilters() {
+        const filters = {};
+        if (selCam.value !== '0') filters.camera_id = selCam.value;
+        if (inpAlgo.value.trim()) filters.algo_id = inpAlgo.value.trim();
+        const taskId = inpTask.value.trim();
+        if (taskId) {
+            if (!/^\d+$/.test(taskId) || !/[1-9]/.test(taskId)) throw new Error('任务 ID 请输入正整数。');
+            filters.task_id = taskId.replace(/^0+/, '');
+        }
+        if (inpType.value.trim()) filters.type = inpType.value.trim();
+        if (selDisposition.value) filters.disposition = selDisposition.value;
+        if (selImportant.value) filters.important = selImportant.value;
+        if (inpFrom.value) filters.from = new Date(inpFrom.value).getTime();
+        if (inpTo.value) filters.to = new Date(inpTo.value).getTime();
+        if (filters.from > filters.to) throw new Error('开始时间不能晚于结束时间。');
+        return filters;
+    }
+
+    function showResultCount() {
+        const history = histList.children.length;
+        const live = liveList.children.length;
+        status.textContent = history || live ? `历史事件 ${history} 条${live ? ` · 实时新增 ${live} 条` : ''}` : '无匹配事件';
+    }
+
+    async function query(loadMore = false) {
+        if (loadMore && (searching || !nextCursor)) return;
+        if (!loadMore) {
+            try { activeFilters = readFilters(); }
+            catch (e) { status.textContent = e.message; return; }
+            ++generation;
+            nextCursor = null;
+            histList.replaceChildren();
+            liveList.replaceChildren();
+            snapshotTimers.forEach(clearTimeout);
+            snapshotTimers.clear();
+        }
+        const request = generation;
+        const params = { ...activeFilters, limit: 10 };
+        if (loadMore) params.cursor = nextCursor;
+        searching = true;
+        moreButton.disabled = true;
+        moreButton.hidden = !nextCursor;
+        status.textContent = loadMore ? '正在加载更早事件…' : '正在查询事件…';
+        try {
+            const result = await api.searchEvents(params, { silent: true });
+            if (!alive || request !== generation) return;
+            for (const event of result.items) {
+                const selector = `[data-event-id="${event.id}"]`;
+                liveList.querySelector(selector)?.remove();
+                if (!histList.querySelector(selector)) histList.appendChild(eventRow(fromStored(event)));
+            }
+            nextCursor = result.next_cursor;
+            showResultCount();
+        } catch (e) {
+            if (alive && request === generation)
+                status.textContent = `${loadMore ? '加载失败，可重试' : '查询失败，可重新查询'}：${e.message}`;
+        } finally {
+            if (alive && request === generation) {
+                searching = false;
+                moreButton.hidden = !nextCursor;
+                moreButton.disabled = false;
+            }
         }
     }
-    qBtn.onclick = () => query().catch(() => {});
-    query().catch(() => {});
+    qBtn.onclick = () => query();
+    moreButton.onclick = () => query(true);
+    for (const control of [inpAlgo, inpTask, inpType]) control.onkeydown = (event) => {
+        if (event.key === 'Enter' && !event.isComposing) query();
+    };
 
-    // WS 实时头插：新事件过当前筛选条件 → 列表顶部插入（上限 100 与查询一致）。
-    // businessd 落库先于 WS 广播，头插的事件已入库，查询中的竞态由随后的
-    // query() 结果自然收敛，无需加锁。
-    // 快照 note：截图在事件广播后异步落盘（~0.5s），WS 行时刻快照未生成 →
-    // 显示"无快照"；重新查询即取到 DB 回填的真实路径
     function matchesFilters(j) {
-        if (Number(selCam.value) !== 0 && j.id !== Number(selCam.value)) return false;
-        const q = inpAlgo.value.trim();
-        if (q && !(j.algo || '').includes(q)) return false;
-        const from = dloc2ms(inpFrom.value), to = dloc2ms(inpTo.value);
-        if (from && j.ts < from) return false;
-        if (to && j.ts > to) return false;
-        return true;
+        const filters = activeFilters;
+        return (!filters.camera_id || String(j.id) === filters.camera_id) &&
+            (!filters.task_id || String(j.task_id) === filters.task_id) &&
+            (!filters.algo_id || j.algo === filters.algo_id) &&
+            (!filters.type || j.type === filters.type) &&
+            (!filters.disposition || j.disposition === filters.disposition) &&
+            (filters.important === undefined || String(j.important) === filters.important) &&
+            (filters.from === undefined || j.ts >= filters.from) && (filters.to === undefined || j.ts <= filters.to);
     }
     // 快照异步回填：businessd 截图在事件广播后 ~0.5s 才落盘（板上实测
     // 0.25~0.76s），WS 行时刻 DB 还没有快照路径（engine 事件帧不带 snap）。
     // 2s 后按 cam+时间窗静默单查，按 ts 精确命中即就地替换该行——不重建
     // 列表、不打断浏览；仍无快照（截图失败/流断）保持"无快照"，下次查询兜底
     function refreshRowSnap(j, row) {
+        const request = generation;
         const timer = setTimeout(async () => {
             snapshotTimers.delete(timer);
             if (!alive) return;
             try {
-                const evs = await api.listEvents({
-                    camera_id: j.id, from: j.ts - 1000, to: j.ts + 1000, limit: 10,
+                const page = await api.searchEvents({
+                    camera_id: j.id, from: j.ts, to: j.ts, algo_id: j.algo, type: j.type, limit: 100,
                 }, { silent: true });
-                const matches = evs.filter((e) => e.ts === j.ts && e.algo_id === j.algo && e.type === j.type &&
+                const matches = page.items.filter((e) =>
                     (e.task_id || 0) === (j.task_id || 0) && (e.rule_id || 0) === (j.rule_id || 0) &&
                     (e.task_revision || 0) === (j.task_revision || 0) && (e.rule_version || 0) === (j.rule_version || 0));
-                if (matches.length === 1 && alive && row.isConnected) {
-                    const hit = matches[0];
-                    row.replaceWith(eventRow({ ...j, event_id: hit.id, important: hit.important, disposition: hit.disposition, snap: hit.snapshot || j.snap }));
+                if (!page.next_cursor && matches.length === 1 && alive && request === generation && row.isConnected) {
+                    const hit = fromStored(matches[0]);
+                    const duplicate = histCol.querySelector(`[data-event-id="${hit.event_id}"]`);
+                    if (duplicate || !matchesFilters(hit)) row.remove();
+                    else row.replaceWith(eventRow(hit));
+                    if (!searching) showResultCount();
                 }
             } catch (_) { /* 静默：回填失败不扰用户 */ }
         }, 2000);
         snapshotTimers.add(timer);
     }
     const offLive = onEvent('event', (j) => {
-        if (!liveChk.checked) return;  // 实时开关关闭：只存查询态，不做头插
-        if (!matchesFilters(j)) return;
-        if (histList.firstElementChild &&
-            histList.firstElementChild.className === 'tri') {
-            histList.innerHTML = '';  // 空态占位 → 有真实事件进来了，清占位
-        }
-        const row = eventRow(j);
-        histList.prepend(row);
-        while (histList.children.length > 100) histList.lastChild.remove();
+        const event = { ...j, disposition: 'pending', important: false };
+        if (!liveChk.checked || !matchesFilters(event)) return;
+        const row = eventRow(event);
+        liveList.prepend(row);
+        while (liveList.children.length > 100) liveList.lastChild.remove();
         refreshRowSnap(j, row);
+        if (!searching) showResultCount();
     });
+    query();
 
     return { unmount() { alive = false; closeDetail?.(); snapshotTimers.forEach(clearTimeout); offLive(); } };
 }

@@ -8,9 +8,13 @@
 
 ## 编译目标分层
 
-事件处置记录（2026-11-17）可在[本地事件页](http://localhost:8080/#/events)验收。打开任一事件详情，在「事件处置」填写姓名或工号和备注，再执行当前状态可用的处置操作。展开「处置记录」查看状态变化、操作时间、填写人和备注。姓名或工号由操作者自行填写。历史记录里空缺的内容显示为未记录。
+事件中心支持按摄像头、算法 ID、任务 ID、事件类型、处置状态、重要标记和时间范围组合查询。选择条件后点「查询」，每次显示 10 条，点「加载更早事件」继续读取。可在[本地事件页](http://localhost:8080/#/events)验收。
 
-处置接口支持选填 `operator_name` 和 `note`，随状态变化在同一事务中保存。`GET /api/events/{id}/disposition/history` 按状态版本倒序返回 `entries`，每页最多 20 条。使用 `next_before_revision` 作为下一次请求的 `before_revision`。schema v11 保留已有处置历史，原记录的新增字段为空。
+`GET /api/events/search` 返回 `items` 和 `next_cursor`。请求可用 `camera_id`、`algo_id`、`task_id`、`type`、`disposition`、`important=true/false`、`from`、`to` 和 `limit`（1–100）。时间是 Unix 毫秒，范围含两端。翻页时保持筛选条件并传入返回的 `cursor` 值。排序按发生时间及事件 ID 倒序，首次查询之后新入库的事件在重新查询时进入历史结果。原 `GET /api/events` 继续返回数组。
+
+事件处置记录可在[本地事件页](http://localhost:8080/#/events)验收。打开未处理事件的详情，填写姓名和工号后点击「确认事件」，备注选填。展开「处置记录」查看状态变化、操作时间、姓名、工号和备注。姓名和工号由操作者自行填写。旧记录缺少的字段显示为未记录。
+
+确认事件时，处置接口要求 `operator_name` 和 `operator_employee_id` 均非空。`note` 可选，和姓名、工号、状态变化在同一事务中保存。`GET /api/events/{id}/disposition/history` 按状态版本倒序返回 `entries`，每页最多 20 条。使用 `next_before_revision` 作为下一次请求的 `before_revision`。schema v12 为处置记录增加工号字段，历史记录原样保留。
 
 事件五态处置（2026-11-17）可在[本地事件页](http://localhost:8080/#/events)验收。打开「事件 #12 → 查看详情」，依次点击「确认事件」「开始处理」「标记已处理」。未结案的事件也可忽略，已处理或已忽略的事件可重新打开。列表和详情均显示处置状态，刷新后可读取已保存的结果。
 
