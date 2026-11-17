@@ -11,7 +11,7 @@ import { colorOf } from './overlay_core.js';
 import { pageTasks } from './task_page.js';
 import { installAccessGate } from './access.js';
 import { scanRequest } from './connection_model.js';
-import { showEventDetail } from './event_detail.js';
+import { showEventDetail, dispositionLabel } from './event_detail.js';
 
 const $view = () => document.getElementById('view');
 let appReady = false;
@@ -1086,6 +1086,7 @@ async function pageEvents() {
             const importantBadge = h('span', 'warn-txt event-important-badge', '★ 重要');
             importantBadge.hidden = !j.important;
             row.appendChild(importantBadge);
+            if (j.disposition) row.appendChild(h('span', 'ev-rule event-disposition-badge', dispositionLabel(j.disposition)));
         }
         row.append(
             h('span', 'mono dim', fmtMs(j.ts)),
@@ -1120,8 +1121,15 @@ async function pageEvents() {
                 cameraName: camName, classesOf,
                 onUpdated(detail) {
                     if (!alive) return;
-                    for (const item of histList.querySelectorAll(`[data-event-id="${j.event_id}"] .event-important-badge`))
-                        item.hidden = !detail.important;
+                    const selector = `[data-event-id="${j.event_id}"]`;
+                    if (typeof detail.important === 'boolean') {
+                        for (const item of histList.querySelectorAll(`${selector} .event-important-badge`))
+                            item.hidden = !detail.important;
+                    }
+                    if (typeof detail.disposition === 'string') {
+                        for (const item of histList.querySelectorAll(`${selector} .event-disposition-badge`))
+                            item.textContent = dispositionLabel(detail.disposition);
+                    }
                 },
             });
         };
@@ -1189,7 +1197,7 @@ async function pageEvents() {
                     (e.task_revision || 0) === (j.task_revision || 0) && (e.rule_version || 0) === (j.rule_version || 0));
                 if (matches.length === 1 && alive && row.isConnected) {
                     const hit = matches[0];
-                    row.replaceWith(eventRow({ ...j, event_id: hit.id, important: hit.important, snap: hit.snapshot || j.snap }));
+                    row.replaceWith(eventRow({ ...j, event_id: hit.id, important: hit.important, disposition: hit.disposition, snap: hit.snapshot || j.snap }));
                 }
             } catch (_) { /* 静默：回填失败不扰用户 */ }
         }, 2000);

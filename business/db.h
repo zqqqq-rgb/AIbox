@@ -64,6 +64,7 @@ struct EventRow {
     int64_t task_id = 0, rule_id = 0, task_revision = 0, rule_version = 0;
     bool important = false;
     int64_t important_revision = 0;
+    std::string disposition = "pending";
 };
 
 struct SegmentRow {
@@ -119,7 +120,7 @@ class Db : public NonCopyable {
 public:
     // 最新 schema 版本（迁移脚本数组的长度；升版只改 db.cpp 的 kLatestVersion，
     // 本常量同步维护——测试/调用方断言 migrate() 返回值用它，勿硬编码）
-    static constexpr int kSchemaLatest = 9;
+    static constexpr int kSchemaLatest = 10;
 
     // path 传 ":memory:" 即内存库（单测）；否则为文件库（目录须已存在）
     explicit Db(const std::string& path);

@@ -9,3 +9,6 @@
 .event-detail-fields{display:grid;grid-template-columns:110px minmax(0,1fr);gap:7px 12px;margin-bottom:16px}
 .event-detail-fields dd{margin:0;overflow-wrap:anywhere}.event-detail-snapshot{max-width:100%;margin-top:12px}
 .ev-row>.btn{margin-left:auto}
+.event-disposition{border-top:1px solid var(--line2);margin:12px 0;padding:10px 0}
+.event-disposition-state{font-weight:600;margin:0 0 8px}
+.event-disposition-actions{flex-wrap:wrap;gap:8px}

@@ -94,6 +94,8 @@ void run() {
     }
     result = client.Put("/api/events/1/important", R"({"important":true,"revision":0})", "application/json");
     REQUIRE(result); CHECK(result->status == 401);
+    result = client.Put("/api/events/1/disposition", R"({"disposition":"ignored","revision":0})", "application/json");
+    REQUIRE(result); CHECK(result->status == 401);
     result = client.Post("/api/auth/login", "{\"token\":\"wrong\"}", "application/json"); REQUIRE(result); CHECK(result->status == 401);
     result = client.Post("/api/auth/login", {{"Origin", "https://evil.example.com"}}, "{\"token\":\"configured-test-secret\"}", "application/json");
     REQUIRE(result); CHECK(result->status == 403);
@@ -102,6 +104,8 @@ void run() {
     CHECK(set_cookie.find("HttpOnly") != std::string::npos && set_cookie.find("Secure") != std::string::npos);
     const std::string cookie = set_cookie.substr(0, set_cookie.find(';'));
     const httplib::Headers read_headers{{"Cookie", cookie}}, write_headers{{"Cookie", cookie}, {"Origin", params.public_origin}};
+    result = client.Put("/api/events/1/disposition", read_headers, R"({"disposition":"ignored","revision":0})", "application/json");
+    REQUIRE(result); CHECK(result->status == 403);
     result = client.Put("/api/events/1/important", read_headers, R"({"important":true,"revision":0})", "application/json");
     REQUIRE(result); CHECK(result->status == 403);
     result = client.Put("/api/events/1/important", write_headers, R"({"important":true,"revision":0})", "application/json");

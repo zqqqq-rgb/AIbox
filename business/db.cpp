@@ -177,6 +177,16 @@ const char* kMigrationV9 =
     "revision INTEGER NOT NULL CHECK(revision>0), important INTEGER NOT NULL CHECK(important IN (0,1)),"
     "changed_at INTEGER NOT NULL, PRIMARY KEY(event_id,revision));";
 
+const char* kMigrationV10 =
+    "ALTER TABLE events ADD COLUMN disposition TEXT NOT NULL DEFAULT 'pending' "
+    "CHECK(disposition IN ('pending','acknowledged','processing','resolved','ignored'));"
+    "ALTER TABLE events ADD COLUMN disposition_revision INTEGER NOT NULL DEFAULT 0 "
+    "CHECK(disposition_revision>=0);"
+    "CREATE TABLE event_disposition_history("
+    "event_id INTEGER NOT NULL REFERENCES events(id) ON DELETE CASCADE,"
+    "revision INTEGER NOT NULL CHECK(revision>0), from_status TEXT NOT NULL, to_status TEXT NOT NULL,"
+    "changed_at INTEGER NOT NULL, PRIMARY KEY(event_id,revision));";
+
 }  // namespace
 
 // ---- open / migrate ----
@@ -227,7 +237,9 @@ int Db::migrate() {
     if (cur >= kLatestVersion) return cur;  // 幂等：已是最新，零副作用
 
     static const char* const kMigrations[] = {kMigrationV1, kMigrationV2,
-                                              kMigrationV3, kMigrationV4, kMigrationV5, kMigrationV6, kMigrationV7, kMigrationV8, kMigrationV9};
+                                              kMigrationV3, kMigrationV4, kMigrationV5, kMigrationV6,
+                                              kMigrationV7, kMigrationV8, kMigrationV9, kMigrationV10};
+    static_assert(sizeof(kMigrations) / sizeof(kMigrations[0]) == kLatestVersion);
     for (int v = cur + 1; v <= kLatestVersion; ++v) {
         Txn t(*this);
         if (!t.active()) return -1;
@@ -964,7 +976,7 @@ std::vector<EventRow> Db::list_events(int64_t camera_id, const std::string& algo
     // 条件过滤缺席时 LIMIT ?5 与实际绑定序错位（板上实测踩中：LIMIT 落 NULL）
     std::string sql =
         "SELECT e.id, camera_id, algo_id, type, ts, snapshot_path, targets_json, reported, "
-        "s.task_id, s.rule_id, s.task_revision, s.rule_version, e.important, e.important_revision "
+        "s.task_id, s.rule_id, s.task_revision, s.rule_version, e.important, e.important_revision, e.disposition "
         "FROM events e LEFT JOIN event_rule_sources s ON s.event_id=e.id WHERE 1=1";
     if (camera_id > 0) sql += " AND camera_id=?";
     if (!algo_id.empty()) sql += " AND algo_id=?";
@@ -992,6 +1004,7 @@ std::vector<EventRow> Db::list_events(int64_t camera_id, const std::string& algo
         r.task_id = st->i64(8); r.rule_id = st->i64(9);
         r.task_revision = st->i64(10); r.rule_version = st->i64(11);
         r.important = st->i64(12) != 0; r.important_revision = st->i64(13);
+        r.disposition = st->text(14);
         rows.push_back(std::move(r));
     }
     return rows;

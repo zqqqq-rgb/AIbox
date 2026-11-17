@@ -13,6 +13,7 @@ public:
     explicit EventService(Db& db) : db_(db) {}
     EventResult detail(int64_t id);
     EventResult set_important(int64_t id, const Json::Value& body);
+    EventResult set_disposition(int64_t id, const Json::Value& body);
 private:
     Db& db_;
 };

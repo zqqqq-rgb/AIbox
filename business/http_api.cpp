@@ -850,6 +850,7 @@ void HttpApi::register_routes() {
     svr_->Get(R"(/api/events/(\d+))", auth_wrap([this](const httplib::Request& req,
                                                                httplib::Response& res) {
         const auto result = EventService(*d_.db).detail(parse_id(req.matches[1].str()));
+        res.set_header("Cache-Control", "no-store");
         reply(res, result.code, result.message, &result.data);
     }));
 
@@ -860,6 +861,16 @@ void HttpApi::register_routes() {
             reply(res, 1001, "expected event importance JSON body"); return;
         }
         const auto result = EventService(*d_.db).set_important(parse_id(req.matches[1].str()), body);
+        reply(res, result.code, result.message, &result.data);
+    }));
+
+    svr_->Put(R"(/api/events/(\d+)/disposition)", auth_wrap([this](const httplib::Request& req, httplib::Response& res) {
+        Json::Value body;
+        if (req.body.size() > 1024 || !parse_task_body(req.body, &body)) {
+            reply(res, 1001, "expected event disposition JSON body");
+            return;
+        }
+        const auto result = EventService(*d_.db).set_disposition(parse_id(req.matches[1].str()), body);
         reply(res, result.code, result.message, &result.data);
     }));
 
@@ -889,6 +900,7 @@ void HttpApi::register_routes() {
             o["task_revision"] = Json::Int64(e.task_revision); o["rule_version"] = Json::Int64(e.rule_version);
             o["important"] = e.important;
             o["important_revision"] = Json::Int64(e.important_revision);
+            o["disposition"] = e.disposition;
             o["type"] = e.type;
             o["ts"] = e.ts;
             if (!e.snapshot_path.empty()) o["snapshot"] = e.snapshot_path;

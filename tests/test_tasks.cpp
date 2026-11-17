@@ -110,6 +110,8 @@ void test_v5_migration_preserves_data() {
     REQUIRE(db.insert_event(event) > 0);
     REQUIRE(db.exec("UPDATE camera_config_state SET apply_status='legacy_inactive';"
                     "DROP TABLE event_importance_history;"
+                    "DROP TABLE event_disposition_history;"
+                    "ALTER TABLE events DROP COLUMN disposition; ALTER TABLE events DROP COLUMN disposition_revision;"
                     "ALTER TABLE events DROP COLUMN important; ALTER TABLE events DROP COLUMN important_revision;"
                     "CREATE TABLE old_algos AS SELECT * FROM camera_algos; DROP VIEW camera_algos; "
                     "DROP TRIGGER camera_legacy_task_insert;"

@@ -1,6 +1,85 @@
 import { api } from './api.js';
 import { h, fmtMs } from './ui.js';
 
+const dispositions = new Map([
+    ['pending', { label: '未处理', action: '重新打开' }],
+    ['acknowledged', { label: '已确认', action: '确认事件' }],
+    ['processing', { label: '处理中', action: '开始处理' }],
+    ['resolved', { label: '已处理', action: '标记已处理' }],
+    ['ignored', { label: '已忽略', action: '忽略事件' }],
+]);
+export function dispositionLabel(status) {
+    return dispositions.get(status)?.label || '状态未知';
+}
+
+function dispositionControls(id, detail, { onUpdated, isCurrent }) {
+    const section = h('section', 'event-disposition');
+    section.setAttribute('aria-label', '事件处置');
+    const state = h('p', 'event-disposition-state');
+    const buttons = h('div', 'row event-disposition-actions');
+    const message = h('p', 'small');
+    message.setAttribute('aria-live', 'polite');
+    section.append(state, buttons, message);
+
+    function render() {
+        state.textContent = `处置状态：${dispositionLabel(detail.disposition)}`;
+        buttons.replaceChildren();
+        if (!Number.isSafeInteger(detail.disposition_revision) || !Array.isArray(detail.allowed_dispositions)) {
+            message.textContent = '当前后端未提供事件处置接口。';
+            return;
+        }
+        for (const desired of detail.allowed_dispositions) {
+            const action = dispositions.get(desired)?.action;
+            if (!action) continue;
+            const button = h('button', 'btn', action);
+            button.onclick = () => save(desired);
+            buttons.append(button);
+        }
+    }
+
+    function applyDisposition(result) {
+        Object.assign(detail, {
+            disposition: result.disposition,
+            disposition_revision: result.disposition_revision,
+            allowed_dispositions: result.allowed_dispositions,
+        });
+        onUpdated({ disposition: detail.disposition, disposition_revision: detail.disposition_revision });
+    }
+
+    async function save(desired) {
+        for (const button of buttons.children) button.disabled = true;
+        message.textContent = '正在保存处置状态…';
+        try {
+            const result = await api.setEventDisposition(id, desired, detail.disposition_revision, { silent: true });
+            applyDisposition(result);
+            if (!isCurrent()) return;
+            render();
+            message.textContent = `处置状态已保存：${dispositionLabel(detail.disposition)}`;
+        } catch (failure) {
+            if (!isCurrent()) return;
+            message.textContent = failure.code === 1003 && failure.data?.reason_code === 'revision_conflict'
+                ? '其他页面已更新处置状态，请刷新后再操作。'
+                : `提交未确认，请刷新处置状态：${failure.message}`;
+            const refresh = h('button', 'btn', '刷新处置状态');
+            refresh.onclick = async () => {
+                refresh.disabled = true;
+                try {
+                    const current = await api.getEvent(id, { silent: true });
+                    if (!isCurrent()) return;
+                    applyDisposition(current);
+                    message.textContent = '';
+                    render();
+                } catch (error) {
+                    if (isCurrent()) message.textContent = `读取处置状态失败：${error.message}`;
+                } finally { refresh.disabled = false; }
+            };
+            buttons.replaceChildren(refresh);
+        }
+    }
+    render();
+    return section;
+}
+
 // Fetch the persisted event by its local event ID, never by camera ID.
 export function showEventDetail(id, { cameraName = {}, classesOf = {}, onUpdated = () => {} } = {}) {
     const root = document.getElementById('modal-root');
@@ -52,17 +131,19 @@ export function showEventDetail(id, { cameraName = {}, classesOf = {}, onUpdated
                 importanceValue.textContent = detail.important ? '★ 重要事件' : '普通事件';
                 importantButton.textContent = detail.important ? '取消重要' : '标记重要';
                 importantButton.disabled = !Number.isSafeInteger(detail.important_revision);
-                onUpdated(detail);
             }
             updateImportance();
+            onUpdated(detail);
             importantButton.onclick = async () => {
                 importantButton.disabled = true;
                 importantButton.textContent = '正在保存…';
                 importantStatus.textContent = '';
                 try {
                     const result = await api.setEventImportant(id, !detail.important, detail.important_revision, { silent: true });
-                    Object.assign(detail, result);
-                    if (!alive) { onUpdated(detail); return; }
+                    detail.important = result.important;
+                    detail.important_revision = result.important_revision;
+                    onUpdated(result);
+                    if (!alive) return;
                     updateImportance();
                     importantStatus.textContent = detail.important ? '已标记为重要事件' : '已取消重要标记';
                 } catch (failure) {
@@ -75,6 +156,8 @@ export function showEventDetail(id, { cameraName = {}, classesOf = {}, onUpdated
                 }
             };
             body.append(importantButton, reloadButton, importantStatus);
+            const disposition = dispositionControls(id, detail, { onUpdated, isCurrent: () => alive && disposition.isConnected });
+            body.append(disposition);
             const targets = Array.isArray(detail.targets) ? detail.targets : [];
             body.append(h('h3', '', `检测目标（${targets.length}）`));
             if (detail.targets_valid === false) body.append(h('p', 'warn-txt', '历史目标数据无法解析，事件基本信息仍可查看。'));

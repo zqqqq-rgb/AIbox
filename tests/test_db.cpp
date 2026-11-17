@@ -374,7 +374,9 @@ void test_v4_migration_preserves_existing_data() {
     event.type = "retained";
     REQUIRE(db.insert_event(event) > 0);
     // Restore exactly the pre-v4 schema while preserving legacy business rows.
-    REQUIRE(db.exec("DROP TABLE event_importance_history;"
+    REQUIRE(db.exec("DROP TABLE event_disposition_history;"
+                    "ALTER TABLE events DROP COLUMN disposition; ALTER TABLE events DROP COLUMN disposition_revision;"
+                    "DROP TABLE event_importance_history;"
                     "ALTER TABLE events DROP COLUMN important; ALTER TABLE events DROP COLUMN important_revision;"
                     "CREATE TABLE old_camera_algos AS SELECT * FROM camera_algos; DROP VIEW camera_algos;"
                     "DROP TRIGGER camera_legacy_task_insert; DROP TABLE task_schedules; DROP TABLE task_rules;"

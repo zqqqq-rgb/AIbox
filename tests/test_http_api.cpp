@@ -367,6 +367,14 @@ void test_events() {
     CHECK(res && parse_json(res->body)["code"].asInt() == 1001);
     res = cli.Put(important_path.c_str(), R"({"important":false,"revision":1})", "application/json");
     CHECK(res && parse_json(res->body)["code"].asInt() == 0);
+    const auto disposition_path = "/api/events/" + std::to_string(event_id) + "/disposition";
+    res = cli.Put(disposition_path.c_str(), R"({"disposition":"acknowledged","revision":0})", "application/json");
+    CHECK(res && parse_json(res->body)["code"] == 0);
+    CHECK(res && parse_json(res->body)["data"]["disposition_revision"].asInt64() == 1);
+    res = cli.Put(disposition_path.c_str(), R"({"disposition":"resolved","revision":1})", "application/json");
+    CHECK(res && parse_json(res->body)["data"]["reason_code"] == "transition_not_allowed");
+    res = cli.Get("/api/events?camera_id=1&algo_id=person");
+    CHECK(res && parse_json(res->body)["data"][0]["disposition"] == "acknowledged");
     CHECK(r.eng.commands() == commands);
 }
 

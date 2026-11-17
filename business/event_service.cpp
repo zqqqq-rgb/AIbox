@@ -4,6 +4,39 @@
 
 namespace aibox {
 namespace biz {
+namespace {
+
+// Status values and transitions are owned by the service. The UI uses the returned options.
+constexpr const char* kStatuses[] = {"pending", "acknowledged", "processing", "resolved", "ignored"};
+
+Json::Value next_dispositions(const std::string& status) {
+    Json::Value allowed(Json::arrayValue);
+    if (status == "pending") allowed.append("acknowledged");
+    if (status == "acknowledged") allowed.append("processing");
+    if (status == "processing") allowed.append("resolved");
+    if (status == "pending" || status == "acknowledged" || status == "processing")
+        allowed.append("ignored");
+    if (status == "resolved" || status == "ignored") allowed.append("pending");
+    return allowed;
+}
+
+void add_disposition(Json::Value& data, const std::string& status, int64_t revision) {
+    data["disposition"] = status;
+    data["disposition_revision"] = Json::Int64(revision);
+    data["allowed_dispositions"] = next_dispositions(status);
+}
+
+bool is_revision(const Json::Value& value) {
+    return (value.type() == Json::intValue || value.type() == Json::uintValue) &&
+        value.isInt64() && value.asInt64() >= 0;
+}
+
+int64_t now_ms() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+}
+
+}  // namespace
 
 EventResult EventService::detail(int64_t id) {
     if (id <= 0) return {1001, "expected positive event id", {}};
@@ -13,7 +46,7 @@ EventResult EventService::detail(int64_t id) {
     auto row = db_.prepare(
         "SELECT e.id,e.camera_id,e.algo_id,e.type,e.ts,e.snapshot_path,e.targets_json,e.reported,"
         "COALESCE(s.task_id,0),COALESCE(s.rule_id,0),COALESCE(s.task_revision,0),COALESCE(s.rule_version,0),"
-        "e.important,e.important_revision "
+        "e.important,e.important_revision,e.disposition,e.disposition_revision "
         "FROM (SELECT 1) anchor LEFT JOIN events e ON e.id=?1 "
         "LEFT JOIN event_rule_sources s ON s.event_id=e.id;");
     if (!row || !row->bind(1, id) || !row->step())
@@ -30,6 +63,7 @@ EventResult EventService::detail(int64_t id) {
     data["reported"] = row->i64(7) != 0;
     data["important"] = row->i64(12) != 0;
     data["important_revision"] = Json::Int64(row->i64(13));
+    add_disposition(data, row->text(14), row->i64(15));
     const char* sources[] = {"task_id", "rule_id", "task_revision", "rule_version"};
     for (int i = 0; i < 4; ++i) data[sources[i]] = Json::Int64(row->i64(8 + i));
 
@@ -46,8 +80,7 @@ EventResult EventService::detail(int64_t id) {
 
 EventResult EventService::set_important(int64_t id, const Json::Value& body) {
     if (id <= 0 || !body.isObject() || body.size() != 2 || !body["important"].isBool() ||
-        (body["revision"].type() != Json::intValue && body["revision"].type() != Json::uintValue) ||
-        !body["revision"].isInt64() || body["revision"].asInt64() < 0)
+        !is_revision(body["revision"]))
         return {1001, "expected positive event id, boolean important and nonnegative integer revision", {}};
     const auto revision = body["revision"].asInt64();
     const bool desired = body["important"].asBool();
@@ -73,17 +106,72 @@ EventResult EventService::set_important(int64_t id, const Json::Value& body) {
         if (!update || !update->bind(1, int64_t(desired)) || !update->bind(2, current + 1) ||
             !update->bind(3, id) || !update->run() || db_.changes() != 1)
             return {5001, "event importance update failed", {}};
-        const int64_t now = std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::system_clock::now().time_since_epoch()).count();
         auto history = db_.prepare("INSERT INTO event_importance_history(event_id,revision,important,changed_at) "
                                    "VALUES(?1,?2,?3,?4);");
         if (!history || !history->bind(1, id) || !history->bind(2, current + 1) ||
-            !history->bind(3, int64_t(desired)) || !history->bind(4, now) || !history->run())
+            !history->bind(3, int64_t(desired)) || !history->bind(4, now_ms()) || !history->run())
             return {5001, "event importance history failed", {}};
         data["important"] = desired; data["important_revision"] = Json::Int64(current + 1);
         data["changed"] = true;
     }
     if (!txn.commit()) return {5001, "event importance commit failed", {}};
+    return {0, "ok", data};
+}
+
+EventResult EventService::set_disposition(int64_t id, const Json::Value& body) {
+    if (id <= 0 || !body.isObject() || body.size() != 2 || !body["disposition"].isString() ||
+        !is_revision(body["revision"]))
+        return {1001, "expected event id, disposition and nonnegative integer revision", {}};
+    const auto desired = body["disposition"].asString();
+    bool valid_status = false;
+    for (const auto* status : kStatuses) if (desired == status) valid_status = true;
+    if (!valid_status) return {1001, "unknown event disposition", {}};
+
+    Db::Txn txn(db_, Db::Txn::Mode::Immediate);
+    if (!txn.active()) return {5001, "event disposition transaction failed", {}};
+    auto row = db_.prepare("SELECT e.id,e.disposition,e.disposition_revision "
+                           "FROM (SELECT 1) anchor LEFT JOIN events e ON e.id=?1;");
+    if (!row || !row->bind(1, id) || !row->step())
+        return {5001, "event disposition query failed", {}};
+    if (row->is_null(0)) return {1002, "event not found", {}};
+    const auto previous = row->text(1);
+    const auto revision = row->i64(2);
+    row.reset();
+
+    Json::Value data;
+    data["id"] = Json::Int64(id);
+    data["changed"] = false;
+    add_disposition(data, previous, revision);
+    if (body["revision"].asInt64() != revision) {
+        data["reason_code"] = "revision_conflict";
+        return {1003, "event disposition changed; reload detail", data};
+    }
+    if (previous == desired) {
+        if (!txn.commit()) return {5001, "event disposition commit failed", {}};
+        return {0, "ok", data};
+    }
+    bool allowed = false;
+    for (const auto& status : data["allowed_dispositions"]) if (status.asString() == desired) allowed = true;
+    if (!allowed) {
+        data["reason_code"] = "transition_not_allowed";
+        return {1003, "event disposition transition not allowed", data};
+    }
+    if (revision == std::numeric_limits<int64_t>::max()) {
+        data["reason_code"] = "revision_exhausted";
+        return {1003, "event disposition revision exhausted", data};
+    }
+    auto update = db_.prepare("UPDATE events SET disposition=?1,disposition_revision=?2 WHERE id=?3;");
+    if (!update || !update->bind(1, desired) || !update->bind(2, revision + 1) ||
+        !update->bind(3, id) || !update->run() || db_.changes() != 1)
+        return {5001, "event disposition update failed", {}};
+    auto history = db_.prepare("INSERT INTO event_disposition_history"
+                               "(event_id,revision,from_status,to_status,changed_at) VALUES(?1,?2,?3,?4,?5);");
+    if (!history || !history->bind(1, id) || !history->bind(2, revision + 1) ||
+        !history->bind(3, previous) || !history->bind(4, desired) || !history->bind(5, now_ms()) || !history->run())
+        return {5001, "event disposition history failed", {}};
+    if (!txn.commit()) return {5001, "event disposition commit failed", {}};
+    add_disposition(data, desired, revision + 1);
+    data["changed"] = true;
     return {0, "ok", data};
 }
 
