@@ -68,13 +68,7 @@ function dispositionHistory(id, isCurrent) {
     };
 }
 
-function dispositionControls(id, detail, { onUpdated, isCurrent }) {
-    const section = h('section', 'event-disposition');
-    section.setAttribute('aria-label', '事件处置');
-    const state = h('p', 'event-disposition-state');
-    const buttons = h('div', 'row event-disposition-actions');
-    const message = h('p', 'small');
-    message.setAttribute('aria-live', 'polite');
+export function createDispositionFields(supportsEmployeeId = true) {
     const fields = h('div', 'disposition-record-fields');
     const author = h('input', 'inp');
     author.type = 'text';
@@ -91,30 +85,56 @@ function dispositionControls(id, detail, { onUpdated, isCurrent }) {
     note.maxLength = 1000;
     const noteLabel = h('label', '', '处置备注（选填）');
     noteLabel.append(note);
-    const confirmationHint = h('p', 'small dim');
-    fields.append(authorLabel, employeeLabel, noteLabel, confirmationHint);
-    fields.hidden = detail.disposition_history_supported !== true;
-    const supportsEmployeeId = detail.disposition_employee_id_supported === true;
     employeeLabel.hidden = !supportsEmployeeId;
+    fields.append(authorLabel, employeeLabel, noteLabel);
+    return {
+        element: fields,
+        hasIdentity: () => Boolean(author.value.trim() && employee.value.trim()),
+        requireIdentity(required) { author.required = employee.required = required; },
+        setDisabled(disabled) { author.disabled = employee.disabled = note.disabled = disabled; },
+        clearNote() { note.value = ''; },
+        read() {
+            const payload = { operator_name: author.value.trim(), note: note.value.trim() };
+            if (supportsEmployeeId) payload.operator_employee_id = employee.value.trim();
+            const encoder = new TextEncoder();
+            if (encoder.encode(payload.operator_name).length > 120 ||
+                encoder.encode(payload.operator_employee_id ?? '').length > 64 ||
+                encoder.encode(payload.note).length > 1000)
+                throw new Error('内容过长。姓名最多 120、工号最多 64、备注最多 1000 个 UTF-8 字节。');
+            return payload;
+        },
+    };
+}
+
+function dispositionControls(id, detail, { onUpdated, isCurrent }) {
+    const section = h('section', 'event-disposition');
+    section.setAttribute('aria-label', '事件处置');
+    const state = h('p', 'event-disposition-state');
+    const buttons = h('div', 'row event-disposition-actions');
+    const message = h('p', 'small');
+    message.setAttribute('aria-live', 'polite');
+    const supportsEmployeeId = detail.disposition_employee_id_supported === true;
+    const fields = createDispositionFields(supportsEmployeeId);
+    const confirmationHint = h('p', 'small dim');
+    fields.element.hidden = detail.disposition_history_supported !== true;
     const history = detail.disposition_history_supported === true ? dispositionHistory(id, isCurrent) : null;
-    section.append(state, fields, buttons, message);
+    section.append(state, fields.element, confirmationHint, buttons, message);
     if (history) section.append(history.panel);
     let confirmButton = null;
 
     function canConfirm() {
-        return supportsEmployeeId && author.value.trim() && employee.value.trim();
+        return supportsEmployeeId && fields.hasIdentity();
     }
     function syncConfirmation() {
         if (confirmButton) confirmButton.disabled = !canConfirm();
     }
-    author.addEventListener('input', syncConfirmation);
-    employee.addEventListener('input', syncConfirmation);
+    fields.element.addEventListener('input', syncConfirmation);
 
     function render() {
         state.textContent = `处置状态：${dispositionLabel(detail.disposition)}`;
         buttons.replaceChildren();
         confirmButton = null;
-        author.required = employee.required = false;
+        fields.requireIdentity(false);
         confirmationHint.hidden = true;
         if (!Number.isSafeInteger(detail.disposition_revision) || !Array.isArray(detail.allowed_dispositions)) {
             message.textContent = '当前后端未提供事件处置接口。';
@@ -126,7 +146,7 @@ function dispositionControls(id, detail, { onUpdated, isCurrent }) {
             const button = h('button', 'btn', action);
             if (desired === 'acknowledged') {
                 confirmButton = button;
-                author.required = employee.required = supportsEmployeeId;
+                fields.requireIdentity(supportsEmployeeId);
                 confirmationHint.hidden = false;
                 confirmationHint.textContent = supportsEmployeeId
                     ? '确认事件前请填写姓名和工号。'
@@ -144,7 +164,8 @@ function dispositionControls(id, detail, { onUpdated, isCurrent }) {
             disposition_revision: result.disposition_revision,
             allowed_dispositions: result.allowed_dispositions,
         });
-        onUpdated({ disposition: detail.disposition, disposition_revision: detail.disposition_revision });
+        onUpdated({ disposition: detail.disposition, disposition_revision: detail.disposition_revision,
+            allowed_dispositions: detail.allowed_dispositions });
     }
 
     async function save(desired) {
@@ -153,26 +174,16 @@ function dispositionControls(id, detail, { onUpdated, isCurrent }) {
             return;
         }
         const payload = { disposition: desired, revision: detail.disposition_revision };
-        if (history) {
-            payload.operator_name = author.value.trim();
-            if (supportsEmployeeId) payload.operator_employee_id = employee.value.trim();
-            payload.note = note.value.trim();
-            const encoder = new TextEncoder();
-            if (encoder.encode(payload.operator_name).length > 120 ||
-                encoder.encode(payload.operator_employee_id ?? '').length > 64 ||
-                encoder.encode(payload.note).length > 1000) {
-                message.textContent = '内容过长。姓名最多 120、工号最多 64、备注最多 1000 个 UTF-8 字节。';
-                return;
-            }
-        }
+        try { if (history) Object.assign(payload, fields.read()); }
+        catch (failure) { message.textContent = failure.message; return; }
         for (const button of buttons.children) button.disabled = true;
-        author.disabled = employee.disabled = note.disabled = true;
+        fields.setDisabled(true);
         message.textContent = '正在保存处置状态…';
         try {
             const result = await api.setEventDisposition(id, payload, { silent: true });
             applyDisposition(result);
             if (!isCurrent()) return;
-            note.value = '';
+            fields.clearNote();
             history?.refresh();
             render();
             message.textContent = `处置状态已保存：${dispositionLabel(detail.disposition)}`;
@@ -197,7 +208,7 @@ function dispositionControls(id, detail, { onUpdated, isCurrent }) {
             };
             buttons.replaceChildren(refresh);
         } finally {
-            author.disabled = employee.disabled = note.disabled = false;
+            fields.setDisabled(false);
         }
     }
     render();

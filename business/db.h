@@ -66,6 +66,7 @@ struct EventRow {
     bool important = false;
     int64_t important_revision = 0;
     std::string disposition = "pending";
+    int64_t disposition_revision = 0;
 };
 
 struct EventCursor {

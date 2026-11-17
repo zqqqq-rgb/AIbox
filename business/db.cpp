@@ -985,7 +985,7 @@ namespace {
 
 constexpr const char* kEventSelect =
     "SELECT e.id, e.camera_id, e.algo_id, e.type, e.ts, e.snapshot_path, e.targets_json, e.reported, "
-    "s.task_id, s.rule_id, s.task_revision, s.rule_version, e.important, e.important_revision, e.disposition "
+    "s.task_id, s.rule_id, s.task_revision, s.rule_version, e.important, e.important_revision, e.disposition, e.disposition_revision "
     "FROM events e LEFT JOIN event_rule_sources s ON s.event_id=e.id WHERE 1=1";
 
 EventRow read_event_row(const Db::Stmt& row) {
@@ -1005,6 +1005,7 @@ EventRow read_event_row(const Db::Stmt& row) {
     event.important = row.i64(12) != 0;
     event.important_revision = row.i64(13);
     event.disposition = row.text(14);
+    event.disposition_revision = row.i64(15);
     return event;
 }
 

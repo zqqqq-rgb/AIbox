@@ -8,6 +8,10 @@
 
 ## 编译目标分层
 
+批量处置可在[本地事件页](http://localhost:8080/#/events)验收。勾选事件，选择「批量确认」「批量开始处理」「批量标记已处理」或「批量忽略」，再点击「执行批量处置」。面板只允许选择所选事件共同支持的操作。批量确认需填写姓名和工号，备注选填。同一批的姓名、工号和备注分别记入各事件的处置记录。
+
+`PUT /api/events/disposition/batch` 接受 `disposition`、`events`（1–50 项 `{ "id": ..., "revision": ... }`）和处置信息。每项版本取自事件查询返回的 `disposition_revision`。整批状态和历史在同一事务中提交，业务冲突会返回 `failed_event_id`。筛选重新执行时清空选择。已加载的历史页可一起勾选。
+
 事件中心支持按摄像头、算法 ID、任务 ID、事件类型、处置状态、重要标记和时间范围组合查询。选择条件后点「查询」，每次显示 10 条，点「加载更早事件」继续读取。可在[本地事件页](http://localhost:8080/#/events)验收。
 
 `GET /api/events/search` 返回 `items` 和 `next_cursor`。请求可用 `camera_id`、`algo_id`、`task_id`、`type`、`disposition`、`important=true/false`、`from`、`to` 和 `limit`（1–100）。时间是 Unix 毫秒，范围含两端。翻页时保持筛选条件并传入返回的 `cursor` 值。排序按发生时间及事件 ID 倒序，首次查询之后新入库的事件在重新查询时进入历史结果。原 `GET /api/events` 继续返回数组。

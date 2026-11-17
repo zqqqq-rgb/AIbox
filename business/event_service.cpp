@@ -2,6 +2,7 @@
 #include <charconv>
 #include <chrono>
 #include <limits>
+#include <set>
 #include <string_view>
 
 namespace aibox {
@@ -11,6 +12,7 @@ namespace {
 // Status values and transitions are owned by the service. The UI uses the returned options.
 constexpr const char* kStatuses[] = {"pending", "acknowledged", "processing", "resolved", "ignored"};
 constexpr Json::ArrayIndex kHistoryPageSize = 20;
+constexpr Json::ArrayIndex kDispositionBatchLimit = 50;
 
 bool known_status(std::string_view value) {
     for (const auto* status : kStatuses) if (value == status) return true;
@@ -34,7 +36,9 @@ bool parse_cursor(std::string_view value, EventCursor& cursor) {
         read_part(cursor.id, true) && cursor.id > 0 && cursor.snapshot_id >= cursor.id;
 }
 
-Json::Value event_list_items(const std::vector<EventRow>& events) {
+void add_disposition(Json::Value& data, const std::string& status, int64_t revision);
+
+Json::Value event_list_items(const std::vector<EventRow>& events, bool include_disposition_options = false) {
     Json::Value items(Json::arrayValue);
     Json::CharReaderBuilder builder;
     auto reader = std::unique_ptr<Json::CharReader>(builder.newCharReader());
@@ -50,6 +54,7 @@ Json::Value event_list_items(const std::vector<EventRow>& events) {
         item["important"] = event.important;
         item["important_revision"] = Json::Int64(event.important_revision);
         item["disposition"] = event.disposition;
+        if (include_disposition_options) add_disposition(item, event.disposition, event.disposition_revision);
         item["type"] = event.type;
         item["ts"] = Json::Int64(event.ts);
         if (!event.snapshot_path.empty()) item["snapshot"] = event.snapshot_path;
@@ -147,7 +152,7 @@ EventResult EventService::search(EventSearchQuery query, const std::string& curs
     EventSearchPage page;
     if (!db_.search_events(query, page)) return {5001, "event search failed", {}};
     Json::Value data;
-    data["items"] = event_list_items(page.items);
+    data["items"] = event_list_items(page.items, true);
     data["next_cursor"] = Json::Value();
     if (page.next) {
         const auto& next = *page.next;
@@ -238,31 +243,40 @@ EventResult EventService::set_important(int64_t id, const Json::Value& body) {
     return {0, "ok", data};
 }
 
-EventResult EventService::set_disposition(int64_t id, const Json::Value& body) {
-    if (id <= 0 || !body.isObject() || !body["disposition"].isString() ||
-        !is_revision(body["revision"]))
-        return {1001, "expected event id, disposition and nonnegative integer revision", {}};
+namespace {
+
+struct DispositionChange {
+    std::string desired, operator_name, employee_id, note;
+};
+
+EventResult decode_disposition(const Json::Value& body, bool batch, DispositionChange& change) {
+    if (!body.isObject() || !body["disposition"].isString())
+        return {1001, "expected an event disposition", {}};
     for (const auto& key : body.getMemberNames()) {
-        if (key != "disposition" && key != "revision" && key != "operator_name" &&
+        if (key != "disposition" && key != (batch ? "events" : "revision") && key != "operator_name" &&
             key != "operator_employee_id" && key != "note")
             return {1001, "unknown event disposition field", {}};
     }
-    std::string operator_name, employee_id, note;
-    if (!read_history_text(body, "operator_name", 120, false, operator_name) ||
-        !read_history_text(body, "operator_employee_id", 64, false, employee_id) ||
-        !read_history_text(body, "note", 1000, true, note))
+    if (!read_history_text(body, "operator_name", 120, false, change.operator_name) ||
+        !read_history_text(body, "operator_employee_id", 64, false, change.employee_id) ||
+        !read_history_text(body, "note", 1000, true, change.note))
         return {1001, "invalid operator name (120 bytes), employee ID (64 bytes), or note (1000 bytes)", {}};
-    const auto desired = body["disposition"].asString();
-    if (!known_status(desired)) return {1001, "unknown event disposition", {}};
-    if (desired == "acknowledged" && (operator_name.empty() || employee_id.empty())) {
+    change.desired = body["disposition"].asString();
+    if (!known_status(change.desired) || (batch && change.desired == "pending"))
+        return {1001, "unsupported event disposition", {}};
+    if (change.desired == "acknowledged" && (change.operator_name.empty() || change.employee_id.empty())) {
         Json::Value data;
         data["reason_code"] = "operator_identity_required";
         return {1001, "operator name and employee ID are required to acknowledge an event", data};
     }
+    return {};
+}
 
-    Db::Txn txn(db_, Db::Txn::Mode::Immediate);
-    if (!txn.active()) return {5001, "event disposition transaction failed", {}};
-    auto row = db_.prepare("SELECT e.id,e.disposition,e.disposition_revision "
+// Caller owns the write transaction, including the history insert.
+EventResult apply_disposition(Db& db, int64_t id, int64_t expected_revision,
+                             const DispositionChange& change, int64_t changed_at, bool batch) {
+    const auto& desired = change.desired;
+    auto row = db.prepare("SELECT e.id,e.disposition,e.disposition_revision "
                            "FROM (SELECT 1) anchor LEFT JOIN events e ON e.id=?1;");
     if (!row || !row->bind(1, id) || !row->step())
         return {5001, "event disposition query failed", {}};
@@ -275,16 +289,15 @@ EventResult EventService::set_disposition(int64_t id, const Json::Value& body) {
     data["id"] = Json::Int64(id);
     data["changed"] = false;
     add_disposition(data, previous, revision);
-    if (body["revision"].asInt64() != revision) {
+    if (expected_revision != revision) {
         data["reason_code"] = "revision_conflict";
         return {1003, "event disposition changed; reload detail", data};
     }
     if (previous == desired) {
-        if (!operator_name.empty() || !employee_id.empty() || !note.empty()) {
+        if (batch || !change.operator_name.empty() || !change.employee_id.empty() || !change.note.empty()) {
             data["reason_code"] = "unchanged_disposition";
             return {1003, "operator and note require a disposition change", data};
         }
-        if (!txn.commit()) return {5001, "event disposition commit failed", {}};
         return {0, "ok", data};
     }
     bool allowed = false;
@@ -297,21 +310,71 @@ EventResult EventService::set_disposition(int64_t id, const Json::Value& body) {
         data["reason_code"] = "revision_exhausted";
         return {1003, "event disposition revision exhausted", data};
     }
-    auto update = db_.prepare("UPDATE events SET disposition=?1,disposition_revision=?2 WHERE id=?3;");
+    auto update = db.prepare("UPDATE events SET disposition=?1,disposition_revision=?2 WHERE id=?3;");
     if (!update || !update->bind(1, desired) || !update->bind(2, revision + 1) ||
-        !update->bind(3, id) || !update->run() || db_.changes() != 1)
+        !update->bind(3, id) || !update->run() || db.changes() != 1)
         return {5001, "event disposition update failed", {}};
-    auto history = db_.prepare("INSERT INTO event_disposition_history"
+    auto history = db.prepare("INSERT INTO event_disposition_history"
                                "(event_id,revision,from_status,to_status,changed_at,operator_name,operator_employee_id,note) "
                                "VALUES(?1,?2,?3,?4,?5,NULLIF(?6,''),NULLIF(?7,''),NULLIF(?8,''));");
     if (!history || !history->bind(1, id) || !history->bind(2, revision + 1) ||
-        !history->bind(3, previous) || !history->bind(4, desired) || !history->bind(5, now_ms()) ||
-        !history->bind(6, operator_name) || !history->bind(7, employee_id) ||
-        !history->bind(8, note) || !history->run())
+        !history->bind(3, previous) || !history->bind(4, desired) || !history->bind(5, changed_at) ||
+        !history->bind(6, change.operator_name) || !history->bind(7, change.employee_id) ||
+        !history->bind(8, change.note) || !history->run())
         return {5001, "event disposition history failed", {}};
-    if (!txn.commit()) return {5001, "event disposition commit failed", {}};
     add_disposition(data, desired, revision + 1);
     data["changed"] = true;
+    return {0, "ok", data};
+}
+
+}  // namespace
+
+EventResult EventService::set_disposition(int64_t id, const Json::Value& body) {
+    if (id <= 0 || !body.isObject() || !is_revision(body["revision"]))
+        return {1001, "expected event id, disposition and nonnegative integer revision", {}};
+    DispositionChange change;
+    const auto decoded = decode_disposition(body, false, change);
+    if (decoded.code != 0) return decoded;
+
+    Db::Txn txn(db_, Db::Txn::Mode::Immediate);
+    if (!txn.active()) return {5001, "event disposition transaction failed", {}};
+    auto result = apply_disposition(db_, id, body["revision"].asInt64(), change, now_ms(), false);
+    if (result.code == 0 && !txn.commit()) return {5001, "event disposition commit failed", {}};
+    return result;
+}
+
+EventResult EventService::set_disposition_batch(const Json::Value& body) {
+    DispositionChange change;
+    const auto decoded = decode_disposition(body, true, change);
+    if (decoded.code != 0) return decoded;
+    const auto& events = body["events"];
+    if (!events.isArray() || events.empty() || events.size() > kDispositionBatchLimit)
+        return {1001, "expected 1 to 50 events", {}};
+    std::set<int64_t> ids;
+    for (const auto& target : events) {
+        if (!target.isObject() || target.size() != 2 || !is_revision(target["id"]) ||
+            target["id"].asInt64() == 0 || !is_revision(target["revision"]))
+            return {1001, "expected event id and nonnegative integer revision", {}};
+        if (!ids.insert(target["id"].asInt64()).second)
+            return {1001, "duplicate event id in batch", {}};
+    }
+
+    Db::Txn txn(db_, Db::Txn::Mode::Immediate);
+    if (!txn.active()) return {5001, "event batch transaction failed", {}};
+    Json::Value items(Json::arrayValue);
+    const auto changed_at = now_ms();
+    for (const auto& target : events) {
+        const auto id = target["id"].asInt64();
+        auto result = apply_disposition(db_, id, target["revision"].asInt64(), change, changed_at, true);
+        if (result.code != 0) {
+            result.data["failed_event_id"] = Json::Int64(id);
+            return result;
+        }
+        items.append(std::move(result.data));
+    }
+    if (!txn.commit()) return {5001, "event batch commit failed", {}};
+    Json::Value data;
+    data["items"] = std::move(items);
     return {0, "ok", data};
 }
 

@@ -400,6 +400,10 @@ void test_events() {
         res = cli.Get((std::string("/api/events/search") + suffix).c_str());
         CHECK(res && parse_json(res->body)["code"] == 1001);
     }
+    res = cli.Put("/api/events/disposition/batch", "{\"disposition\":\"ignored\",\"events\":[{\"id\":" +
+                  std::to_string(event_id) + ",\"revision\":1}]}", "application/json");
+    CHECK(res && parse_json(res->body)["code"] == 0);
+    CHECK(res && parse_json(res->body)["data"]["items"][0]["disposition"] == "ignored");
     CHECK(r.eng.commands() == commands);
 }
 

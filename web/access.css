@@ -16,6 +16,10 @@
 .event-filter-field{display:grid;gap:4px;font-size:.85rem;color:var(--dim)}
 .event-filter-field input,.event-filter-field select{color:var(--txt)}
 .event-pages{align-items:center;gap:12px;margin-top:10px}
+.event-batch{margin:0 0 12px;padding:10px 12px}
+.event-batch-toolbar{flex-wrap:wrap;margin-bottom:4px}
+.event-batch .disposition-record-fields{grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));margin-top:8px}
+.event-select{margin:0;accent-color:var(--acc)}
 .disposition-record-fields{display:grid;gap:8px;margin-bottom:10px}
 .disposition-record-fields label{display:grid;gap:4px;margin:0}
 .disposition-record-fields textarea{width:100%;resize:vertical;font:inherit}

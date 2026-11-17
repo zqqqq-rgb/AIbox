@@ -130,6 +130,79 @@ void test_disposition_records() {
     CHECK(older["entries"][0]["revision"].asInt64() == 2 && older["entries"][1] == first[0]);
 }
 
+void test_batch_disposition() {
+    Db db(":memory:");
+    REQUIRE(db.migrate() == Db::kSchemaLatest);
+    EventService service(db);
+    EventRow event;
+    event.camera_id = 3;
+    const auto first = db.insert_event(event);
+    const auto second = db.insert_event(event);
+    REQUIRE(first > 0 && second > first);
+    auto selection = [](int64_t id, int64_t revision) {
+        Json::Value value;
+        value["id"] = Json::Int64(id);
+        value["revision"] = Json::Int64(revision);
+        return value;
+    };
+    Json::Value body;
+    body["disposition"] = "acknowledged";
+    body["events"].append(selection(first, 0));
+    body["events"].append(selection(second, 0));
+    CHECK(service.set_disposition_batch(body).data["reason_code"] == "operator_identity_required");
+    body["operator_name"] = "值班员";
+    body["operator_employee_id"] = "0008";
+    body["note"] = "批量核对完成";
+    auto invalid = body;
+    invalid["events"][1] = selection(first, 0);
+    CHECK(service.set_disposition_batch(invalid).code == 1001);
+    invalid = body;
+    invalid["events"].resize(51);
+    CHECK(service.set_disposition_batch(invalid).code == 1001);
+    invalid = body;
+    invalid["events"][1] = selection(9999, 0);
+    const auto missing = service.set_disposition_batch(invalid);
+    CHECK(missing.code == 1002 && missing.data["failed_event_id"].asInt64() == 9999);
+    CHECK(service.disposition_history(first).data["entries"].empty());
+
+    auto result = service.set_disposition_batch(body);
+    REQUIRE(result.code == 0 && result.data["items"].size() == 2);
+    const auto one = service.disposition_history(first).data["entries"][0];
+    const auto two = service.disposition_history(second).data["entries"][0];
+    CHECK(one == two && one["operator_employee_id"] == "0008" && one["note"] == "批量核对完成");
+    CHECK(result.data["items"][1]["disposition_revision"].asInt64() == 1);
+    CHECK(service.search(EventSearchQuery{}, "").data["items"][0]["disposition_revision"].asInt64() == 1);
+
+    body["disposition"] = "processing";
+    body["events"][0] = selection(first, 1);
+    result = service.set_disposition_batch(body);
+    REQUIRE(result.code == 1003 && result.data["reason_code"] == "revision_conflict");
+    CHECK(result.data["failed_event_id"].asInt64() == second);
+    CHECK(service.detail(first).data["disposition"] == "acknowledged");
+    CHECK(service.disposition_history(first).data["entries"].size() == 1);
+
+    body["events"][1] = selection(second, 1);
+    REQUIRE(db.exec("CREATE TRIGGER reject_second_history BEFORE INSERT ON event_disposition_history "
+                    "WHEN NEW.event_id=" + std::to_string(second) +
+                    " BEGIN SELECT RAISE(ABORT,'history failure'); END;"));
+    result = service.set_disposition_batch(body);
+    CHECK(result.code == 5001 && result.data["failed_event_id"].asInt64() == second);
+    CHECK(service.detail(first).data["disposition"] == "acknowledged");
+    CHECK(service.detail(second).data["disposition"] == "acknowledged");
+    CHECK(service.disposition_history(first).data["entries"].size() == 1);
+    REQUIRE(db.exec("DROP TRIGGER reject_second_history;"));
+    body["disposition"] = "resolved";
+    CHECK(service.set_disposition_batch(body).data["reason_code"] == "transition_not_allowed");
+    body["disposition"] = "processing";
+    REQUIRE(service.set_disposition_batch(body).code == 0);
+    body["events"][0] = selection(first, 2);
+    body["events"][1] = selection(second, 2);
+    body["disposition"] = "resolved";
+    REQUIRE(service.set_disposition_batch(body).code == 0);
+    CHECK(service.detail(first).data["disposition"] == "resolved");
+    CHECK(service.detail(second).data["disposition"] == "resolved");
+}
+
 void test_event_search() {
     Db db(":memory:");
     REQUIRE(db.migrate() == Db::kSchemaLatest);
@@ -294,7 +367,7 @@ void run() {
 }
 }
 int main() {
-    try { run(); test_disposition(); test_disposition_records(); test_event_search(); }
+    try { run(); test_disposition(); test_disposition_records(); test_event_search(); test_batch_disposition(); }
     catch (const std::exception& error) { fprintf(stderr,"event_detail: %s\n",error.what()); return 1; }
     if (!g_fail) printf("event_detail PASSED\n");
     return g_fail;

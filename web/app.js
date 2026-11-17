@@ -12,6 +12,7 @@ import { pageTasks } from './task_page.js';
 import { installAccessGate } from './access.js';
 import { scanRequest } from './connection_model.js';
 import { showEventDetail, dispositionLabel } from './event_detail.js';
+import { createEventBatch } from './event_batch.js';
 
 const $view = () => document.getElementById('view');
 let appReady = false;
@@ -1083,7 +1084,15 @@ async function pageEvents() {
     const status = h('p', 'small dim'); status.setAttribute('aria-live', 'polite');
     const moreButton = h('button', 'btn', '加载更早事件'); moreButton.hidden = true;
     const pages = h('div', 'row event-pages'); pages.append(status, moreButton);
-    histCol.append(f, liveList, histList, pages);
+    const batch = createEventBatch({
+        isCurrent: () => alive,
+        onBusy(busy) {
+            qBtn.disabled = busy;
+            moreButton.disabled = busy || searching;
+        },
+        onApplied(items) { for (const item of items) updateEventRows(item.id, item); },
+    });
+    histCol.append(f, batch.panel, liveList, histList, pages);
     wrap.appendChild(histCol);
     $view().appendChild(wrap);
 
@@ -1104,6 +1113,7 @@ async function pageEvents() {
         const hasEventId = Number.isSafeInteger(j.event_id) && j.event_id > 0;
         if (hasEventId) {
             row.dataset.eventId = String(j.event_id);
+            batch.addRow(row, j);
             row.appendChild(h('span', 'mono dim', `事件 #${j.event_id}`));
             const importantBadge = h('span', 'warn-txt event-important-badge', '★ 重要');
             importantBadge.hidden = !j.important;
@@ -1141,28 +1151,7 @@ async function pageEvents() {
             closeDetail?.();
             closeDetail = showEventDetail(j.event_id, {
                 cameraName: camName, classesOf,
-                onUpdated(detail) {
-                    if (!alive) return;
-                    const selector = `[data-event-id="${j.event_id}"]`;
-                    for (const item of histCol.querySelectorAll(selector)) {
-                        if (typeof detail.important === 'boolean') {
-                            if (activeFilters.important !== undefined && String(detail.important) !== activeFilters.important) {
-                                item.remove();
-                                continue;
-                            }
-                            item.querySelector('.event-important-badge').hidden = !detail.important;
-                        }
-                        if (typeof detail.disposition === 'string') {
-                            if (activeFilters.disposition && detail.disposition !== activeFilters.disposition) {
-                                item.remove();
-                                continue;
-                            }
-                            const label = item.querySelector('.event-disposition-badge');
-                            if (label) label.textContent = dispositionLabel(detail.disposition);
-                        }
-                    }
-                    if (!searching) showResultCount();
-                },
+                onUpdated: (detail) => updateEventRows(j.event_id, detail),
             });
         };
         row.append(detailButton);
@@ -1171,6 +1160,34 @@ async function pageEvents() {
 
     const fromStored = (event) => ({ ...event, event_id: event.id, id: event.camera_id, algo: event.algo_id, snap: event.snapshot });
     let activeFilters = {}, nextCursor = null, generation = 0, searching = false;
+
+    function removeEventRow(row) {
+        batch.removeRow(row);
+        row.remove();
+    }
+
+    function updateEventRows(id, detail) {
+        if (!alive) return;
+        for (const row of histCol.querySelectorAll(`[data-event-id="${id}"]`)) {
+            if (typeof detail.important === 'boolean') {
+                if (activeFilters.important !== undefined && String(detail.important) !== activeFilters.important) {
+                    removeEventRow(row);
+                    continue;
+                }
+                row.querySelector('.event-important-badge').hidden = !detail.important;
+            }
+            if (typeof detail.disposition === 'string') {
+                if (activeFilters.disposition && detail.disposition !== activeFilters.disposition) {
+                    removeEventRow(row);
+                    continue;
+                }
+                batch.updateRow(row, detail);
+                const label = row.querySelector('.event-disposition-badge');
+                if (label) label.textContent = dispositionLabel(detail.disposition);
+            }
+        }
+        if (!searching) showResultCount();
+    }
 
     function readFilters() {
         const filters = {};
@@ -1197,12 +1214,14 @@ async function pageEvents() {
     }
 
     async function query(loadMore = false) {
+        if (batch.isBusy()) return;
         if (loadMore && (searching || !nextCursor)) return;
         if (!loadMore) {
             try { activeFilters = readFilters(); }
             catch (e) { status.textContent = e.message; return; }
             ++generation;
             nextCursor = null;
+            batch.reset();
             histList.replaceChildren();
             liveList.replaceChildren();
             snapshotTimers.forEach(clearTimeout);
@@ -1220,7 +1239,8 @@ async function pageEvents() {
             if (!alive || request !== generation) return;
             for (const event of result.items) {
                 const selector = `[data-event-id="${event.id}"]`;
-                liveList.querySelector(selector)?.remove();
+                const liveRow = liveList.querySelector(selector);
+                if (liveRow) removeEventRow(liveRow);
                 if (!histList.querySelector(selector)) histList.appendChild(eventRow(fromStored(event)));
             }
             nextCursor = result.next_cursor;
@@ -1232,7 +1252,7 @@ async function pageEvents() {
             if (alive && request === generation) {
                 searching = false;
                 moreButton.hidden = !nextCursor;
-                moreButton.disabled = false;
+                moreButton.disabled = batch.isBusy();
             }
         }
     }
@@ -1284,7 +1304,7 @@ async function pageEvents() {
         if (!liveChk.checked || !matchesFilters(event)) return;
         const row = eventRow(event);
         liveList.prepend(row);
-        while (liveList.children.length > 100) liveList.lastChild.remove();
+        while (liveList.children.length > 100) removeEventRow(liveList.lastChild);
         refreshRowSnap(j, row);
         if (!searching) showResultCount();
     });
