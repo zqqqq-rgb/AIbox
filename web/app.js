@@ -1054,7 +1054,8 @@ async function pageEvents() {
     const inpType = h('input', 'inp'); inpType.placeholder = '如 person_dwell'; inpType.maxLength = 256;
     const selDisposition = h('select', 'sel');
     selDisposition.append(new Option('全部状态', ''));
-    for (const status of ['pending', 'acknowledged', 'processing', 'resolved', 'ignored'])
+    const dispositions = ['pending', 'acknowledged', 'processing', 'resolved', 'ignored'];
+    for (const status of dispositions)
         selDisposition.append(new Option(dispositionLabel(status), status));
     const selImportant = h('select', 'sel');
     selImportant.append(new Option('全部事件', ''), new Option('仅重要', 'true'), new Option('仅普通', 'false'));
@@ -1084,15 +1085,26 @@ async function pageEvents() {
     const status = h('p', 'small dim'); status.setAttribute('aria-live', 'polite');
     const moreButton = h('button', 'btn', '加载更早事件'); moreButton.hidden = true;
     const pages = h('div', 'row event-pages'); pages.append(status, moreButton);
+    const statsPanel = h('section', 'panel event-stats');
+    statsPanel.setAttribute('aria-label', '事件统计');
+    const statsHeading = h('div', 'row');
+    const statsStatus = h('span', 'small dim');
+    statsStatus.setAttribute('role', 'status');
+    statsHeading.append(h('h3', '', '事件统计'), statsStatus);
+    const statsCounts = h('dl', 'event-stats-counts');
+    statsPanel.append(statsHeading, statsCounts);
     const batch = createEventBatch({
         isCurrent: () => alive,
         onBusy(busy) {
             qBtn.disabled = busy;
             moreButton.disabled = busy || searching;
         },
-        onApplied(items) { for (const item of items) updateEventRows(item.id, item); },
+        onApplied(items) {
+            for (const item of items) updateEventRows(item.id, item);
+            refreshStats();
+        },
     });
-    histCol.append(f, batch.panel, liveList, histList, pages);
+    histCol.append(f, statsPanel, batch.panel, liveList, histList, pages);
     wrap.appendChild(histCol);
     $view().appendChild(wrap);
 
@@ -1151,7 +1163,10 @@ async function pageEvents() {
             closeDetail?.();
             closeDetail = showEventDetail(j.event_id, {
                 cameraName: camName, classesOf,
-                onUpdated: (detail) => updateEventRows(j.event_id, detail),
+                onUpdated(detail) {
+                    updateEventRows(j.event_id, detail);
+                    refreshStats();
+                },
             });
         };
         row.append(detailButton);
@@ -1160,6 +1175,32 @@ async function pageEvents() {
 
     const fromStored = (event) => ({ ...event, event_id: event.id, id: event.camera_id, algo: event.algo_id, snap: event.snapshot });
     let activeFilters = {}, nextCursor = null, generation = 0, searching = false;
+    let statsRequest = 0;
+
+    async function refreshStats() {
+        if (!alive) return;
+        const request = ++statsRequest;
+        statsCounts.replaceChildren();
+        statsStatus.textContent = '正在统计…';
+        try {
+            const counts = await api.getEventStats(activeFilters, { silent: true });
+            if (!alive || request !== statsRequest) return;
+            const metrics = [
+                ['匹配总数', counts.total],
+                ...dispositions.map((key) => [dispositionLabel(key), counts.by_disposition[key]]),
+                ['其中重要', counts.important],
+            ];
+            for (const [label, count] of metrics) {
+                const metric = h('div');
+                metric.append(h('dt', 'small dim', label), h('dd', 'mono', String(count)));
+                statsCounts.append(metric);
+            }
+            statsStatus.textContent = `最近查询 ${new Date().toLocaleTimeString()}`;
+        } catch (e) {
+            if (alive && request === statsRequest)
+                statsStatus.textContent = `统计读取失败，点击查询可重试：${e.message}`;
+        }
+    }
 
     function removeEventRow(row) {
         batch.removeRow(row);
@@ -1220,6 +1261,7 @@ async function pageEvents() {
             try { activeFilters = readFilters(); }
             catch (e) { status.textContent = e.message; return; }
             ++generation;
+            refreshStats();
             nextCursor = null;
             batch.reset();
             histList.replaceChildren();

@@ -12,6 +12,7 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <optional>
@@ -67,6 +68,7 @@ struct EventRow {
     int64_t important_revision = 0;
     std::string disposition = "pending";
     int64_t disposition_revision = 0;
+    std::string event_uid;
 };
 
 struct EventCursor {
@@ -75,13 +77,21 @@ struct EventCursor {
     int64_t id = 0;
 };
 
-struct EventSearchQuery {
+struct EventFilters {
     int64_t camera_id = 0, task_id = 0;
     std::string algo_id, type, disposition;
     std::optional<int64_t> from_ms, to_ms;
     std::optional<bool> important;
+};
+
+struct EventSearchQuery : EventFilters {
     std::optional<EventCursor> cursor;
     int limit = 20;
+};
+
+struct EventStats {
+    int64_t total = 0, important = 0;
+    std::map<std::string, int64_t> by_disposition;
 };
 
 struct EventSearchPage {
@@ -142,7 +152,7 @@ class Db : public NonCopyable {
 public:
     // 最新 schema 版本（迁移脚本数组的长度；升版只改 db.cpp 的 kLatestVersion，
     // 本常量同步维护——测试/调用方断言 migrate() 返回值用它，勿硬编码）
-    static constexpr int kSchemaLatest = 13;
+    static constexpr int kSchemaLatest = 14;
 
     // path 传 ":memory:" 即内存库（单测）；否则为文件库（目录须已存在）
     explicit Db(const std::string& path);
@@ -171,6 +181,7 @@ public:
         Txn& operator=(const Txn&) = delete;
         bool active() const { return active_; }
         bool commit();
+        int64_t store_event(const EventRow& event, std::string& uid, bool& created);
     private:
         Db& db_;
         std::unique_lock<std::recursive_mutex> lock_;
@@ -261,6 +272,7 @@ public:
     // ---- events ----
     int64_t insert_event(const EventRow& r);
     bool search_events(const EventSearchQuery& query, EventSearchPage& page);
+    bool event_stats(const EventFilters& filters, EventStats& stats);
     // 事件快照回填（截图异步完成后的第二步写入；失败不影响事件本体）
     bool update_event_snapshot(int64_t event_id, const std::string& path);
     // 过滤参数取"哨兵零值"关闭：camera_id<=0 / algo_id 空 / from/to 为 0

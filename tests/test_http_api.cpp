@@ -400,10 +400,24 @@ void test_events() {
         res = cli.Get((std::string("/api/events/search") + suffix).c_str());
         CHECK(res && parse_json(res->body)["code"] == 1001);
     }
+    res = cli.Get("/api/events/stats?camera_id=1&type=REGION_IN&important=false&disposition=acknowledged&from=5000&to=5000");
+    CHECK(res && res->get_header_value("Cache-Control") == "no-store");
+    if (res) {
+        const auto stats = parse_json(res->body)["data"];
+        CHECK(stats["total"] == 1 && stats["important"] == 0);
+        CHECK(stats["by_disposition"]["acknowledged"] == 1 && stats["by_disposition"]["pending"] == 0);
+    }
+    for (const auto* suffix : {"?limit=1", "?cursor=1", "?important=false&important=true", "?disposition=unknown",
+                               "?from=5&to=4", "?camera_id=0", "?task_id=", "?unknown=1"}) {
+        res = cli.Get((std::string("/api/events/stats") + suffix).c_str());
+        CHECK(res && parse_json(res->body)["code"].asInt() == 1001);
+    }
     res = cli.Put("/api/events/disposition/batch", "{\"disposition\":\"ignored\",\"events\":[{\"id\":" +
                   std::to_string(event_id) + ",\"revision\":1}]}", "application/json");
     CHECK(res && parse_json(res->body)["code"] == 0);
     CHECK(res && parse_json(res->body)["data"]["items"][0]["disposition"] == "ignored");
+    res = cli.Get("/api/events/stats?disposition=ignored");
+    CHECK(res && parse_json(res->body)["data"]["by_disposition"]["ignored"] == 1);
     CHECK(r.eng.commands() == commands);
 }
 

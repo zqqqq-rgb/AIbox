@@ -351,6 +351,7 @@ std::string encode_event(const RuleEventEvt& v) {
     r["type"] = v.type;
     r["ts"] = Json::Value::Int64(v.ts);
     r["snap"] = v.snap;
+    if (!v.event_uid.empty()) r["event_uid"] = v.event_uid;
     if (v.task_id || v.rule_id || v.task_revision || v.rule_version) {
         r["task_id"] = Json::UInt64(v.task_id);
         r["rule_id"] = Json::UInt64(v.rule_id);
@@ -673,6 +674,13 @@ int decode_line(const std::string& line, ParsedMsg& out) {
             GET_STR(root, "type", v.type);
             GET_I64(root, "ts", v.ts);
             GET_STR(root, "snap", v.snap);
+            if (root.isMember("event_uid")) {
+                GET_STR(root, "event_uid", v.event_uid);
+                if (v.event_uid.empty() || v.event_uid.size() > 96 ||
+                    v.event_uid.find_first_not_of("ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._:-")
+                        != std::string::npos || v.event_uid.compare(0, 6, "local-") == 0)
+                    return kErrProtocol;
+            }
             if (root.isMember("task_id") || root.isMember("rule_id") ||
                 root.isMember("task_revision") || root.isMember("rule_version")) {
                 GET_U64(root, "task_id", v.task_id);

@@ -119,6 +119,7 @@ struct RuleEventEvt { // RuleEngine 产出
     int64_t ts = 0;
     std::vector<DetTarget> targets;
     uint64_t task_id = 0, rule_id = 0, task_revision = 0, rule_version = 0;
+    std::string event_uid; // assigned at emission; absent on older engines
 };
 
 struct DegradeEvt {

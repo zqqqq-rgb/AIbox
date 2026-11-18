@@ -100,6 +100,8 @@ void run() {
     REQUIRE(result); CHECK(result->status == 401);
     result = client.Get("/api/events/search?limit=1");
     REQUIRE(result); CHECK(result->status == 401);
+    result = client.Get("/api/events/stats");
+    REQUIRE(result); CHECK(result->status == 401);
     result = client.Put("/api/events/disposition/batch", R"({"disposition":"ignored","events":[{"id":1,"revision":0}]})", "application/json");
     REQUIRE(result); CHECK(result->status == 401);
     result = client.Post("/api/auth/login", "{\"token\":\"wrong\"}", "application/json"); REQUIRE(result); CHECK(result->status == 401);

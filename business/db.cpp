@@ -199,6 +199,13 @@ const char* kMigrationV13 =
     "CREATE INDEX IF NOT EXISTS idx_events_ts_id ON events(ts DESC,id DESC);"
     "CREATE INDEX IF NOT EXISTS idx_event_sources_task ON event_rule_sources(task_id,event_id);";
 
+const char* kMigrationV14 =
+    "ALTER TABLE events ADD COLUMN event_uid TEXT NOT NULL DEFAULT '';"
+    "UPDATE events SET event_uid='local-'||lower(hex(randomblob(16)));"
+    "CREATE UNIQUE INDEX idx_events_uid ON events(event_uid);"
+    "CREATE TRIGGER assign_local_event_uid AFTER INSERT ON events WHEN NEW.event_uid='' BEGIN "
+    "UPDATE events SET event_uid='local-'||lower(hex(randomblob(16))) WHERE id=NEW.id; END;";
+
 }  // namespace
 
 // ---- open / migrate ----
@@ -251,7 +258,7 @@ int Db::migrate() {
     static const char* const kMigrations[] = {kMigrationV1, kMigrationV2,
                                               kMigrationV3, kMigrationV4, kMigrationV5, kMigrationV6,
                                               kMigrationV7, kMigrationV8, kMigrationV9, kMigrationV10,
-                                              kMigrationV11, kMigrationV12, kMigrationV13};
+                                              kMigrationV11, kMigrationV12, kMigrationV13, kMigrationV14};
     static_assert(sizeof(kMigrations) / sizeof(kMigrations[0]) == kLatestVersion);
     for (int v = cur + 1; v <= kLatestVersion; ++v) {
         Txn t(*this);
@@ -959,34 +966,90 @@ std::vector<AlgoMetaRow> Db::list_algorithms_meta() {
 // ---- events ----
 
 int64_t Db::insert_event(const EventRow& r) {
-    std::lock_guard<std::recursive_mutex> lk(mu_);
+    Txn txn(*this, Txn::Mode::Immediate);
+    std::string uid;
+    bool created = false;
+    const auto id = txn.store_event(r, uid, created);
+    return id > 0 && txn.commit() ? id : -1;
+}
+
+int64_t Db::Txn::store_event(const EventRow& r, std::string& uid, bool& created) {
+    created = false;
+    if (!active_) return -1;
     const bool sourced = r.task_id || r.rule_id || r.task_revision || r.rule_version;
     if (sourced && (r.task_id <= 0 || r.rule_id <= 0 || r.task_revision <= 0 || r.rule_version <= 0)) return -1;
-    Txn txn(*this);
-    if (!txn.active()) return -1;
-    auto st = prepare("INSERT INTO events(camera_id, algo_id, type, ts, snapshot_path, "
-                      "targets_json, reported) VALUES(?1,?2,?3,?4,?5,?6,?7);");
+    uid = r.event_uid;
+    if (!uid.empty()) {
+        auto old = db_.prepare("SELECT e.id,e.camera_id,e.algo_id,e.type,e.ts,e.targets_json,"
+                               "s.task_id,s.rule_id,s.task_revision,s.rule_version FROM events e "
+                               "LEFT JOIN event_rule_sources s ON s.event_id=e.id WHERE e.event_uid=?1;");
+        if (!old || !old->bind(1, uid)) return -1;
+        if (old->step()) {
+            if (old->i64(1) != r.camera_id || old->text(2) != r.algo_id || old->text(3) != r.type ||
+                old->i64(4) != r.ts || old->text(5) != r.targets_json || old->i64(6) != r.task_id ||
+                old->i64(7) != r.rule_id || old->i64(8) != r.task_revision || old->i64(9) != r.rule_version) {
+                db_.err_ = "event_uid reused for a different event";
+                return -1;
+            }
+            return old->i64(0);
+        }
+        if (!db_.last_error().empty()) return -1;
+    }
+    auto st = db_.prepare("INSERT INTO events(camera_id, algo_id, type, ts, snapshot_path, "
+                          "targets_json, reported, event_uid) VALUES(?1,?2,?3,?4,?5,?6,?7,?8);");
     if (!st) return -1;
     if (!st->bind(1, r.camera_id) || !st->bind(2, r.algo_id) || !st->bind(3, r.type) ||
         !st->bind(4, r.ts) || !st->bind(5, r.snapshot_path) || !st->bind(6, r.targets_json) ||
-        !st->bind(7, static_cast<int64_t>(r.reported ? 1 : 0)))
+        !st->bind(7, static_cast<int64_t>(r.reported ? 1 : 0)) || !st->bind(8, uid))
         return -1;
     if (!st->run()) return -1;
-    const auto id = last_insert_rowid();
+    const auto id = db_.last_insert_rowid();
     if (sourced) {
-        auto source = prepare("INSERT INTO event_rule_sources VALUES(?1,?2,?3,?4,?5);");
+        auto source = db_.prepare("INSERT INTO event_rule_sources VALUES(?1,?2,?3,?4,?5);");
         if (!source || !source->bind(1,id) || !source->bind(2,r.task_id) || !source->bind(3,r.rule_id) ||
             !source->bind(4,r.task_revision) || !source->bind(5,r.rule_version) || !source->run()) return -1;
     }
-    return txn.commit() ? id : -1;
+    if (uid.empty()) {
+        auto assigned = db_.prepare("SELECT event_uid FROM events WHERE id=?1;");
+        if (!assigned || !assigned->bind(1, id) || !assigned->step()) return -1;
+        uid = assigned->text(0);
+    }
+    created = true;
+    return id;
 }
 
 namespace {
 
 constexpr const char* kEventSelect =
     "SELECT e.id, e.camera_id, e.algo_id, e.type, e.ts, e.snapshot_path, e.targets_json, e.reported, "
-    "s.task_id, s.rule_id, s.task_revision, s.rule_version, e.important, e.important_revision, e.disposition, e.disposition_revision "
+    "s.task_id, s.rule_id, s.task_revision, s.rule_version, e.important, e.important_revision, e.disposition, e.disposition_revision,e.event_uid "
     "FROM events e LEFT JOIN event_rule_sources s ON s.event_id=e.id WHERE 1=1";
+
+using EventBinding = std::variant<int64_t, std::string>;
+
+void append_event_filters(std::string& sql, std::vector<EventBinding>& values, const EventFilters& query) {
+    auto add = [&](const char* clause, EventBinding value) {
+        sql += clause;
+        values.push_back(std::move(value));
+    };
+    if (query.camera_id) add(" AND e.camera_id=?", query.camera_id);
+    if (query.task_id) add(" AND s.task_id=?", query.task_id);
+    if (!query.algo_id.empty()) add(" AND e.algo_id=?", query.algo_id);
+    if (!query.type.empty()) add(" AND e.type=?", query.type);
+    if (!query.disposition.empty()) add(" AND e.disposition=?", query.disposition);
+    if (query.important.has_value()) add(" AND e.important=?", int64_t(*query.important));
+    if (query.from_ms) add(" AND e.ts>=?", *query.from_ms);
+    if (query.to_ms) add(" AND e.ts<=?", *query.to_ms);
+}
+
+bool bind_event_values(Db::Stmt& row, const std::vector<EventBinding>& values) {
+    int index = 1;
+    for (const auto& value : values) {
+        if (!std::visit([&](const auto& v) { return row.bind(index, v); }, value)) return false;
+        ++index;
+    }
+    return true;
+}
 
 EventRow read_event_row(const Db::Stmt& row) {
     EventRow event;
@@ -1006,6 +1069,7 @@ EventRow read_event_row(const Db::Stmt& row) {
     event.important_revision = row.i64(13);
     event.disposition = row.text(14);
     event.disposition_revision = row.i64(15);
+    event.event_uid = row.text(16);
     return event;
 }
 
@@ -1025,33 +1089,18 @@ bool Db::search_events(const EventSearchQuery& query, EventSearchPage& page) {
         snapshot_id = max_id->i64(0);
     }
     std::string sql = kEventSelect;
-    using Binding = std::variant<int64_t, std::string>;
-    std::vector<Binding> values;
-    auto add = [&](const char* clause, Binding value) {
-        sql += clause;
-        values.push_back(std::move(value));
-    };
-    add(" AND e.id<=?", snapshot_id);
-    if (query.camera_id) add(" AND e.camera_id=?", query.camera_id);
-    if (query.task_id) add(" AND s.task_id=?", query.task_id);
-    if (!query.algo_id.empty()) add(" AND e.algo_id=?", query.algo_id);
-    if (!query.type.empty()) add(" AND e.type=?", query.type);
-    if (!query.disposition.empty()) add(" AND e.disposition=?", query.disposition);
-    if (query.important.has_value()) add(" AND e.important=?", int64_t(*query.important));
-    if (query.from_ms) add(" AND e.ts>=?", *query.from_ms);
-    if (query.to_ms) add(" AND e.ts<=?", *query.to_ms);
+    sql += " AND e.id<=?";
+    std::vector<EventBinding> values{snapshot_id};
+    append_event_filters(sql, values, query);
     if (query.cursor) {
-        add(" AND (e.ts,e.id)<(?,?)", query.cursor->ts);
+        sql += " AND (e.ts,e.id)<(?,?)";
+        values.emplace_back(query.cursor->ts);
         values.emplace_back(query.cursor->id);
     }
-    add(" ORDER BY e.ts DESC,e.id DESC LIMIT ?;", int64_t(query.limit) + 1);
+    sql += " ORDER BY e.ts DESC,e.id DESC LIMIT ?;";
+    values.emplace_back(int64_t(query.limit) + 1);
     auto row = prepare(sql);
-    if (!row) return false;
-    int index = 1;
-    for (const auto& value : values) {
-        if (!std::visit([&](const auto& v) { return row->bind(index, v); }, value)) return false;
-        ++index;
-    }
+    if (!row || !bind_event_values(*row, values)) return false;
     EventSearchPage result;
     while (row->step()) {
         if (result.items.size() == static_cast<size_t>(query.limit)) {
@@ -1065,6 +1114,28 @@ bool Db::search_events(const EventSearchQuery& query, EventSearchPage& page) {
     row.reset();
     if (!read.commit()) return false;
     page = std::move(result);
+    return true;
+}
+
+bool Db::event_stats(const EventFilters& filters, EventStats& stats) {
+    std::lock_guard<std::recursive_mutex> lk(mu_);
+    std::string sql = "SELECT e.disposition, COUNT(*), SUM(e.important) FROM events e";
+    if (filters.task_id) sql += " JOIN event_rule_sources s ON s.event_id=e.id";
+    sql += " WHERE 1=1";
+    std::vector<EventBinding> values;
+    append_event_filters(sql, values, filters);
+    sql += " GROUP BY e.disposition;";
+    auto row = prepare(sql);
+    if (!row || !bind_event_values(*row, values)) return false;
+    EventStats result;
+    while (row->step()) {
+        const auto count = row->i64(1);
+        result.by_disposition.emplace(row->text(0), count);
+        result.total += count;
+        result.important += row->i64(2);
+    }
+    if (!last_error().empty()) return false;
+    stats = std::move(result);
     return true;
 }
 

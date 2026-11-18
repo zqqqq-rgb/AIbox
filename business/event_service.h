@@ -13,6 +13,7 @@ public:
     explicit EventService(Db& db) : db_(db) {}
     Json::Value list(int64_t camera_id, const std::string& algo_id, int64_t from, int64_t to, int limit);
     EventResult search(EventSearchQuery query, const std::string& cursor);
+    EventResult stats(const EventFilters& filters);
     EventResult detail(int64_t id);
     EventResult set_important(int64_t id, const Json::Value& body);
     EventResult set_disposition(int64_t id, const Json::Value& body);

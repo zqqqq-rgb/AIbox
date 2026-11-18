@@ -270,6 +270,59 @@ void test_event_search() {
     CHECK(EventService(unavailable).search(EventSearchQuery{}, "").code == 5001);
 }
 
+void test_event_stats() {
+    Db db(":memory:");
+    REQUIRE(db.migrate() == Db::kSchemaLatest);
+    EventService service(db);
+    const auto empty = service.stats({});
+    REQUIRE(empty.code == 0 && empty.data["by_disposition"].size() == 5);
+    CHECK(empty.data["total"] == 0 && empty.data["important"] == 0);
+    for (const auto* status : {"pending", "acknowledged", "processing", "resolved", "ignored"})
+        CHECK(empty.data["by_disposition"][status] == 0);
+
+    EventRow event;
+    event.camera_id = 2; event.algo_id = "person"; event.type = "dwell"; event.ts = 1000;
+    // Historical events without task metadata still count. More than one display page.
+    for (int i = 0; i < 12; ++i) REQUIRE(db.insert_event(event) > 0);
+    event.task_id = 7; event.rule_id = 9; event.task_revision = 1; event.rule_version = 1;
+    const auto id = db.insert_event(event);
+    REQUIRE(id > 0);
+    Json::Value flag;
+    flag["important"] = true; flag["revision"] = 0;
+    REQUIRE(service.set_important(id, flag).code == 0);
+    EventFilters filters;
+    filters.camera_id = 2; filters.algo_id = "person"; filters.type = "dwell"; filters.task_id = 7;
+    filters.from_ms = filters.to_ms = 1000; filters.important = true;
+    int64_t revision = 0;
+    for (const auto* status : {"acknowledged", "processing", "resolved", "pending", "ignored"}) {
+        REQUIRE(service.set_disposition(id, transition(status, revision++)).code == 0);
+        filters.disposition = status;
+        const auto selected = service.stats(filters);
+        REQUIRE(selected.code == 0 && selected.data["total"] == 1 && selected.data["important"] == 1);
+        CHECK(selected.data["by_disposition"][status] == 1);
+    }
+    const auto all = service.stats({});
+    REQUIRE(all.code == 0 && all.data["total"] == 13 && all.data["important"] == 1);
+    CHECK(all.data["by_disposition"]["pending"] == 12 && all.data["by_disposition"]["ignored"] == 1);
+    CHECK(all.data["by_disposition"]["resolved"] == 0);
+    auto miss = filters; miss.camera_id = 3;
+    CHECK(service.stats(miss).data == empty.data);
+    miss = filters; miss.task_id = 8;
+    CHECK(service.stats(miss).data == empty.data);
+    miss = filters; miss.algo_id = "vehicle";
+    CHECK(service.stats(miss).data == empty.data);
+    miss = filters; miss.type = "intrusion";
+    CHECK(service.stats(miss).data == empty.data);
+    miss = filters; miss.important = false;
+    CHECK(service.stats(miss).data == empty.data);
+    miss = filters; miss.from_ms = miss.to_ms = 1001;
+    CHECK(service.stats(miss).data == empty.data);
+    miss = filters; miss.disposition = "processing";
+    CHECK(service.stats(miss).data == empty.data);
+    Db unavailable(":memory:");
+    CHECK(EventService(unavailable).stats({}).code == 5001);
+}
+
 void run() {
     Db db(":memory:"); REQUIRE(db.migrate() == Db::kSchemaLatest);
     EventService service(db);
@@ -367,7 +420,7 @@ void run() {
 }
 }
 int main() {
-    try { run(); test_disposition(); test_disposition_records(); test_event_search(); test_batch_disposition(); }
+    try { run(); test_disposition(); test_disposition_records(); test_event_search(); test_batch_disposition(); test_event_stats(); }
     catch (const std::exception& error) { fprintf(stderr,"event_detail: %s\n",error.what()); return 1; }
     if (!g_fail) printf("event_detail PASSED\n");
     return g_fail;

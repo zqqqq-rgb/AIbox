@@ -16,6 +16,10 @@
 .event-filter-field{display:grid;gap:4px;font-size:.85rem;color:var(--dim)}
 .event-filter-field input,.event-filter-field select{color:var(--txt)}
 .event-pages{align-items:center;gap:12px;margin-top:10px}
+.event-stats{padding:10px 12px;margin-bottom:12px}
+.event-stats h3{margin:0}
+.event-stats-counts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,82px),1fr));gap:10px;margin:8px 0 0}
+.event-stats-counts dd{margin:3px 0 0;font-size:1.2rem}
 .event-batch{margin:0 0 12px;padding:10px 12px}
 .event-batch-toolbar{flex-wrap:wrap;margin-bottom:4px}
 .event-batch .disposition-record-fields{grid-template-columns:repeat(auto-fit,minmax(min(100%,180px),1fr));margin-top:8px}

@@ -20,6 +20,7 @@
 #include <cstdlib>
 #include <deque>
 #include <functional>
+#include <fstream>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -202,6 +203,8 @@ struct App : NonCopyable {
     PostProc post;
     UdsServer uds;
     RuleRuntime runtime;
+    std::string event_session;
+    uint64_t event_sequence = 0; // single postprocessing thread
     DegradeController degrade;
 
     std::mutex mu; // 保护 chans / chan_algos / algo_core 三个 map（冷路径 + 轻量读）
@@ -377,6 +380,7 @@ void postproc_once(App& app, PostItem& it) {
                  al.algo.c_str(), al.event_type.c_str(), t0.track_id, t0.x, t0.y, t0.w, t0.h);
         }
         proto::RuleEventEvt ev;
+        ev.event_uid = app.event_session + "-" + std::to_string(++app.event_sequence);
         ev.id = al.cam;
         ev.algo = al.algo;
         ev.type = al.event_type;
@@ -807,6 +811,11 @@ int main(int argc, char** argv) {
     App app(a, a.fake ? fake_deps() : board_deps(plan));
 #endif
     app.npu_plan = plan;
+    // Linux supplies a fresh UUID per read, independent of wall-clock adjustments and UDS reconnects.
+    if (!(std::ifstream("/proc/sys/kernel/random/uuid") >> app.event_session)) {
+        LOGE("main", "cannot initialize engine event session UUID");
+        return 1;
+    }
 
     // 1. 算法注册表（详设 §3.11 第 1~2 步：扫描 + 校验 + 自检；坏包 disabled）
     app.registry.load_all();

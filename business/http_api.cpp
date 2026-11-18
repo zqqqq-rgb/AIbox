@@ -46,13 +46,13 @@ int64_t parse_id(const std::string& text) {
     return value>0?value:-1;
 }
 
-bool parse_event_search(const httplib::Request& req, EventSearchQuery& query, std::string& cursor) {
+bool parse_event_query(const httplib::Request& req, EventSearchQuery& query, std::string* page_cursor = nullptr) {
     for (const auto& [key, value] : req.params) {
         if (req.params.count(key) != 1 || value.empty()) return false;
         if (key == "algo_id") query.algo_id = value;
         else if (key == "type") query.type = value;
         else if (key == "disposition") query.disposition = value;
-        else if (key == "cursor") cursor = value;
+        else if (key == "cursor" && page_cursor) *page_cursor = value;
         else if (key == "important") {
             if (value != "true" && value != "false") return false;
             query.important = value == "true";
@@ -65,7 +65,7 @@ bool parse_event_search(const httplib::Request& req, EventSearchQuery& query, st
             else if (key == "to") query.to_ms = number;
             else if (key == "camera_id" && number > 0) query.camera_id = number;
             else if (key == "task_id" && number > 0) query.task_id = number;
-            else if (key == "limit" && number >= 1 && number <= 100) query.limit = static_cast<int>(number);
+            else if (key == "limit" && page_cursor && number >= 1 && number <= 100) query.limit = static_cast<int>(number);
             else return false;
         }
     }
@@ -921,12 +921,23 @@ void HttpApi::register_routes() {
     svr_->Get("/api/events/search", auth_wrap([this](const httplib::Request& req, httplib::Response& res) {
         EventSearchQuery query;
         std::string cursor;
-        if (!parse_event_search(req, query, cursor)) {
+        if (!parse_event_query(req, query, &cursor)) {
             reply(res, 1001, "invalid event search parameters");
             return;
         }
         const auto result = EventService(*d_.db).search(std::move(query), cursor);
         res.set_header("Cache-Control", "no-store");
+        reply(res, result.code, result.message, &result.data);
+    }));
+
+    svr_->Get("/api/events/stats", auth_wrap([this](const httplib::Request& req, httplib::Response& res) {
+        EventSearchQuery query;
+        res.set_header("Cache-Control", "no-store");
+        if (!parse_event_query(req, query)) {
+            reply(res, 1001, "invalid event statistics parameters");
+            return;
+        }
+        const auto result = EventService(*d_.db).stats(query);
         reply(res, result.code, result.message, &result.data);
     }));
 

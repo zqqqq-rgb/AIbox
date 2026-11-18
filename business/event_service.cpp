@@ -19,6 +19,13 @@ bool known_status(std::string_view value) {
     return false;
 }
 
+bool valid_event_filters(const EventFilters& filters) {
+    return filters.camera_id >= 0 && filters.task_id >= 0 &&
+        filters.algo_id.size() <= 128 && filters.type.size() <= 256 &&
+        (filters.disposition.empty() || known_status(filters.disposition)) &&
+        (!filters.from_ms || !filters.to_ms || *filters.from_ms <= *filters.to_ms);
+}
+
 bool parse_cursor(std::string_view value, EventCursor& cursor) {
     if (value.size() > 64 || value.substr(0, 3) != "v1:") return false;
     value.remove_prefix(3);
@@ -139,10 +146,7 @@ Json::Value EventService::list(int64_t camera_id, const std::string& algo_id, in
 }
 
 EventResult EventService::search(EventSearchQuery query, const std::string& cursor) {
-    if (query.camera_id < 0 || query.task_id < 0 || query.limit < 1 || query.limit > 100 ||
-        query.algo_id.size() > 128 || query.type.size() > 256 ||
-        (!query.disposition.empty() && !known_status(query.disposition)) ||
-        (query.from_ms && query.to_ms && *query.from_ms > *query.to_ms))
+    if (!valid_event_filters(query) || query.limit < 1 || query.limit > 100)
         return {1001, "invalid event search filters", {}};
     if (!cursor.empty()) {
         EventCursor parsed;
@@ -158,6 +162,18 @@ EventResult EventService::search(EventSearchQuery query, const std::string& curs
         const auto& next = *page.next;
         data["next_cursor"] = "v1:" + std::to_string(next.snapshot_id) + ":" + std::to_string(next.ts) + ":" + std::to_string(next.id);
     }
+    return {0, "ok", data};
+}
+
+EventResult EventService::stats(const EventFilters& filters) {
+    if (!valid_event_filters(filters)) return {1001, "invalid event statistics filters", {}};
+    EventStats counts;
+    if (!db_.event_stats(filters, counts)) return {5001, "event statistics query failed", {}};
+    Json::Value data;
+    data["total"] = Json::Int64(counts.total);
+    data["important"] = Json::Int64(counts.important);
+    for (const auto* status : kStatuses)
+        data["by_disposition"][status] = Json::Int64(counts.by_disposition[status]);
     return {0, "ok", data};
 }
 
