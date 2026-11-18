@@ -88,6 +88,7 @@ void run() {
 void migration_and_concurrency() {
     char file[] = "/tmp/aibox_event_important_XXXXXX";
     const int fd = mkstemp(file); REQUIRE(fd >= 0); close(fd);
+    std::string historic_uid;
     {
         Db old(file);
         // Minimum v8 event fixture: migration must preserve historic records.
@@ -100,11 +101,14 @@ void migration_and_concurrency() {
             "INSERT INTO event_rule_sources VALUES(12,7,6,2,1);"));
         REQUIRE(old.migrate() == Db::kSchemaLatest && old.migrate() == Db::kSchemaLatest);
         auto detail = EventService(old).detail(12).data;
+        historic_uid = detail["event_uid"].asString();
+        CHECK(historic_uid.find("local-") == 0);
         CHECK(detail["reported"].asBool() && detail["task_id"].asInt64() == 7);
         CHECK(detail["snapshot"].asString() == "historic.jpg" && !detail["important"].asBool());
     }
     {
         Db first(file), second(file);
+        CHECK(EventService(first).detail(12).data["event_uid"] == historic_uid);
         std::atomic<bool> start{false};
         int a = -1, b = -1;
         std::thread one([&] { while (!start.load()) std::this_thread::yield();

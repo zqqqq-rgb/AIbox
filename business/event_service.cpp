@@ -52,6 +52,7 @@ Json::Value event_list_items(const std::vector<EventRow>& events, bool include_d
     for (const auto& event : events) {
         Json::Value item;
         item["id"] = Json::Int64(event.id);
+        item["event_uid"] = event.event_uid;
         item["camera_id"] = Json::Int64(event.camera_id);
         item["algo_id"] = event.algo_id;
         item["task_id"] = Json::Int64(event.task_id);
@@ -141,6 +142,49 @@ bool read_history_text(const Json::Value& body, const char* key, size_t max_byte
 
 }  // namespace
 
+EventReceipt EventService::ingest(const proto::RuleEventEvt& event, const std::string& line, bool queue_report) {
+    Json::Value message;
+    Json::CharReaderBuilder reader;
+    std::string error;
+    if (!std::unique_ptr<Json::CharReader>(reader.newCharReader())->parse(
+            line.data(), line.data() + line.size(), &message, &error) || !message.isObject()) return {};
+    Json::StreamWriterBuilder writer;
+    writer["indentation"] = "";
+    EventRow row;
+    row.event_uid = event.event_uid;
+    row.camera_id = event.id;
+    row.algo_id = event.algo;
+    row.type = event.type;
+    row.ts = event.ts;
+    row.task_id = event.task_id;
+    row.task_revision = event.task_revision;
+    row.rule_id = event.rule_id;
+    row.rule_version = event.rule_version;
+    row.snapshot_path = event.snap;
+    row.targets_json = Json::writeString(writer, message["targets"]);
+
+    Db::Txn txn(db_, Db::Txn::Mode::Immediate);
+    bool created = false;
+    EventReceipt receipt;
+    receipt.id = txn.store_event(row, receipt.uid, created);
+    if (receipt.id <= 0) return {};
+    if (created) {
+        message["event_id"] = Json::Int64(receipt.id);
+        message["event_uid"] = receipt.uid;
+        message["important"] = false;
+        message["important_revision"] = 0;
+        add_disposition(message, "pending", 0);
+        receipt.broadcast = Json::writeString(writer, message);
+        if (queue_report) {
+            message["_event_id"] = Json::Int64(receipt.id);
+            if (db_.insert_outbox("aibox/events/" + std::to_string(event.id), Json::writeString(writer, message)) <= 0)
+                return {};
+        }
+    }
+    if (!txn.commit()) return {};
+    return receipt;
+}
+
 Json::Value EventService::list(int64_t camera_id, const std::string& algo_id, int64_t from, int64_t to, int limit) {
     return event_list_items(db_.list_events(camera_id, algo_id, from, to, limit));
 }
@@ -185,7 +229,7 @@ EventResult EventService::detail(int64_t id) {
     auto row = db_.prepare(
         "SELECT e.id,e.camera_id,e.algo_id,e.type,e.ts,e.snapshot_path,e.targets_json,e.reported,"
         "COALESCE(s.task_id,0),COALESCE(s.rule_id,0),COALESCE(s.task_revision,0),COALESCE(s.rule_version,0),"
-        "e.important,e.important_revision,e.disposition,e.disposition_revision "
+        "e.important,e.important_revision,e.disposition,e.disposition_revision,e.event_uid "
         "FROM (SELECT 1) anchor LEFT JOIN events e ON e.id=?1 "
         "LEFT JOIN event_rule_sources s ON s.event_id=e.id;");
     if (!row || !row->bind(1, id) || !row->step())
@@ -194,6 +238,7 @@ EventResult EventService::detail(int64_t id) {
 
     Json::Value data(Json::objectValue);
     data["id"] = Json::Int64(row->i64(0));
+    data["event_uid"] = row->text(16);
     data["camera_id"] = Json::Int64(row->i64(1));
     data["algo_id"] = row->text(2);
     data["type"] = row->text(3);

@@ -42,6 +42,7 @@
 #include "common/Log.h"
 #include "common/NonCopyable.h"
 #include "hook_server.h"
+#include "event_service.h"
 #include "http_api.h"
 #include "janitor.h"
 #include "reconciler.h"
@@ -238,10 +239,8 @@ int run(const std::string& config_path) {
                 snap_q.pop_front();
             }
             if (snap_dir.empty()) { ++snap_discarded; continue; }
-            char file[600];
-            std::snprintf(file, sizeof(file), "%s/cam%lld_%lld.jpg", snap_dir.c_str(),
-                          static_cast<long long>(job.cam),
-                          static_cast<long long>(job.ts_ms));
+            const auto file = snap_dir + "/cam" + std::to_string(job.cam) + "_" +
+                std::to_string(job.ts_ms) + "_" + std::to_string(job.event_id) + ".jpg";
             // 回环 URL：ZLM 自己的 RTSP 服务（代理流命名 cam{id}_sub，架构 §4.3）
             const std::string loop_rtsp =
                 "rtsp://127.0.0.1:" + std::to_string(cfg.zlm_rtsp_port) +
@@ -249,13 +248,20 @@ int run(const std::string& config_path) {
             std::string jpeg;
             if (zlm.get_snap(loop_rtsp, 3, &jpeg)) {
                 std::ofstream f(file, std::ios::binary);
-                if (f && f.write(jpeg.data(), static_cast<std::streamsize>(jpeg.size())) &&
-                    f.good()) {
-                    db.update_event_snapshot(job.event_id, file);
+                f.write(jpeg.data(), static_cast<std::streamsize>(jpeg.size()));
+                f.close();
+                if (f && db.update_event_snapshot(job.event_id, file)) {
+                    Json::Value update;
+                    update["evt"] = "event_updated";
+                    update["event_id"] = Json::Int64(job.event_id);
+                    update["snap"] = file;
+                    Json::StreamWriterBuilder writer;
+                    writer["indentation"] = "";
+                    ws.broadcast(Json::writeString(writer, update));
                     LOGI("main", "event %lld snapshot %s (%zu bytes)",
-                         static_cast<long long>(job.event_id), file, jpeg.size());
+                         static_cast<long long>(job.event_id), file.c_str(), jpeg.size());
                 } else {
-                    LOGW("main", "snapshot 落盘失败: %s", file);
+                    LOGW("main", "snapshot 保存失败: %s", file.c_str());
                 }
             } else {
                 LOGW("main", "event %lld 截图失败（流可能已断，事件不丢）",
@@ -295,30 +301,19 @@ int run(const std::string& config_path) {
         if (pm.name == "detections") {
             ws.send_meta(pm.detections.id, line);  // /ws/meta/{cam} 组播（原始行）
         } else if (pm.name == "event") {
-            biz::EventRow e;
-            e.camera_id = pm.event.id;
-            e.algo_id = pm.event.algo;
-            e.task_id = pm.event.task_id; e.rule_id = pm.event.rule_id;
-            e.task_revision = pm.event.task_revision; e.rule_version = pm.event.rule_version;
-            e.type = pm.event.type;
-            e.ts = pm.event.ts;
-            e.snapshot_path = pm.event.snap;
-            // targets 从原始行提取（ParsedMsg 往返会丢未知字段）
-            Json::Value root;
-            Json::CharReaderBuilder rb;
-            std::unique_ptr<Json::CharReader> rd(rb.newCharReader());
-            std::string errs;
-            if (rd->parse(line.data(), line.data() + line.size(), &root, &errs) &&
-                root.isMember("targets")) {
-                Json::StreamWriterBuilder wb;
-                wb["indentation"] = "";
-                e.targets_json = Json::writeString(wb, root["targets"]);
+            const auto receipt = biz::EventService(db).ingest(pm.event, line, cfg.mqtt_enabled);
+            if (receipt.id <= 0) {
+                LOGE("main", "event save failed cam=%u uid=%s: %s", pm.event.id,
+                     pm.event.event_uid.c_str(), db.last_error().c_str());
+                return;
             }
-            const int64_t id = db.insert_event(e);
+            if (receipt.broadcast.empty()) return; // replay has no new external effects
+            ws.broadcast(receipt.broadcast);
+            const auto id = receipt.id;
             // 事件快照（方案 A）：入队到独立截图线程——on_evt 在 UDS 接收线程
             // 同步执行，getSnap 最长 3s（回环流断时超时）会堵死事件分发与
             // ZlmClient 全局锁（HttpApi 的 ZLM 操作连锁阻塞，板上实证"不报警"）
-            if (id > 0) {
+            {
                 std::lock_guard<std::mutex> lk(snap_mu);
                 if (!snap_running || cfg.recordings_dir.empty()) {
                     ++snap_discarded;
@@ -330,16 +325,6 @@ int run(const std::string& config_path) {
                     LOGW("main", "snapshot queue full; event %lld retained without snapshot",
                          static_cast<long long>(id));
                 }
-            }
-            ws.broadcast(line);  // WS 弹窗
-            if (cfg.mqtt_enabled && id > 0) {
-                // outbox 断网缓存：payload 附加 _event_id（重传 ack 后对账 reported=1）
-                Json::Value payload = root;
-                payload["_event_id"] = id;
-                Json::StreamWriterBuilder wb;
-                wb["indentation"] = "";
-                db.insert_outbox("aibox/events/" + std::to_string(pm.event.id),
-                                 Json::writeString(wb, payload));
             }
         } else if (pm.name == "camera_status") {
             db.set_camera_online(pm.camera_status.id, pm.camera_status.online);

@@ -267,8 +267,12 @@ void pipeline(const char* engine_binary, const char* business_binary) {
         return events.isArray() && events.size() >= 2;
     }));
     CHECK(events.size() == 2);
+    std::set<std::string> uids;
     std::set<int64_t> tasks;
     for (const auto& event : events) {
+        const auto uid = event["event_uid"].asString();
+        CHECK(!uid.empty() && uid.find("local-") != 0);
+        CHECK(uids.insert(uid).second);
         tasks.insert(event["task_id"].asInt64());
         CHECK(event["task_revision"] == 7 && event["rule_version"] == 8);
         CHECK(event["rule_id"].asInt64() == event["task_id"].asInt64() + 100);

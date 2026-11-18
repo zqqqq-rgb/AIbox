@@ -179,10 +179,13 @@ void terminate_during_snapshot(const char* executable) {
     aibox::proto::RuleEventEvt event;
     event.id = static_cast<uint32_t>(id);
     event.algo = "person"; event.type = "region_in";
+    event.event_uid = "startup-test-1";
     event.ts = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
     engine.emit(aibox::proto::encode_event(event));
     CHECK(waiting.wait_for(std::chrono::seconds(3)) == std::future_status::ready);
+    engine.emit(aibox::proto::encode_event(event)); // replay must not enqueue another snapshot
+    event.event_uid.clear(); // legacy engine events remain distinct
     // First task is executing; 128 wait and 2 overflow. All events must remain indexed.
     for (int i = 0; i < 130; ++i) { ++event.ts; engine.emit(aibox::proto::encode_event(event)); }
     aibox::biz::Db retained(child.directory + "/business.db");

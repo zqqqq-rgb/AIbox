@@ -375,6 +375,7 @@ void test_v4_migration_preserves_existing_data() {
     REQUIRE(db.insert_event(event) > 0);
     // Restore exactly the pre-v4 schema while preserving legacy business rows.
     REQUIRE(db.exec("DROP TABLE event_disposition_history;"
+                    "DROP TRIGGER assign_local_event_uid; DROP INDEX idx_events_uid; ALTER TABLE events DROP COLUMN event_uid;"
                     "ALTER TABLE events DROP COLUMN disposition; ALTER TABLE events DROP COLUMN disposition_revision;"
                     "DROP TABLE event_importance_history;"
                     "ALTER TABLE events DROP COLUMN important; ALTER TABLE events DROP COLUMN important_revision;"

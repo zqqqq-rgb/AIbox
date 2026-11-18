@@ -2,6 +2,8 @@
 #include "test_util.h"
 #include <atomic>
 #include <cstdio>
+#include <functional>
+#include <sstream>
 #include <stdexcept>
 #include <thread>
 #include <unistd.h>
@@ -323,6 +325,71 @@ void test_event_stats() {
     CHECK(EventService(unavailable).stats({}).code == 5001);
 }
 
+void test_event_ingest() {
+    char path[] = "/tmp/aibox_event_ingest_XXXXXX";
+    const int fd = mkstemp(path); REQUIRE(fd >= 0); close(fd);
+    aibox::proto::RuleEventEvt event;
+    event.event_uid = "engine-session-1";
+    event.id = 8; event.algo = "person"; event.type = "dwell"; event.ts = 1000;
+    event.task_id = 7; event.rule_id = 9; event.rule_version = 1; event.task_revision = 2;
+    const auto line = aibox::proto::encode_event(event);
+    int64_t original_id = 0;
+    {
+        Db first(path), second(path);
+        REQUIRE(first.migrate() == Db::kSchemaLatest);
+        EventReceipt a, b;
+        std::atomic<bool> start{false};
+        auto replay = [&](Db& db, EventReceipt& result) {
+            while (!start.load()) std::this_thread::yield();
+            result = EventService(db).ingest(event, line, true);
+        };
+        std::thread one(replay, std::ref(first), std::ref(a));
+        std::thread two(replay, std::ref(second), std::ref(b));
+        start = true; one.join(); two.join();
+        REQUIRE(a.id > 0 && a.id == b.id && a.uid == event.event_uid && a.uid == b.uid);
+        CHECK(a.broadcast.empty() != b.broadcast.empty());
+        Json::Value ws;
+        std::istringstream message(a.broadcast.empty() ? b.broadcast : a.broadcast);
+        message >> ws;
+        CHECK(ws["id"] == 8 && ws["event_id"].asInt64() == a.id && ws["event_uid"] == a.uid);
+        CHECK(ws["allowed_dispositions"].size() == 2 && ws["disposition_revision"] == 0);
+        CHECK(!ws.isMember("_event_id"));
+        const auto outbox = first.pending_outbox(5);
+        REQUIRE(outbox.size() == 1);
+        std::istringstream report(outbox[0].payload);
+        Json::Value payload; report >> payload;
+        CHECK(payload["_event_id"].asInt64() == a.id && payload["event_uid"] == a.uid);
+        original_id = a.id;
+        REQUIRE(EventService(first).set_disposition(a.id, transition("ignored", 0)).code == 0);
+    }
+    {
+        Db db(path);
+        EventService service(db);
+        const auto replay = service.ingest(event, line, true);
+        CHECK(replay.id == original_id && replay.broadcast.empty());
+        CHECK(service.stats({}).data["total"] == 1 && service.detail(original_id).data["disposition"] == "ignored");
+        ++event.ts;
+        CHECK(service.ingest(event, aibox::proto::encode_event(event), true).id < 0);
+        --event.ts;
+        event.event_uid = "engine-session-2";
+        auto next = [&] { return service.ingest(event, aibox::proto::encode_event(event), true); };
+        REQUIRE(db.exec("CREATE TRIGGER fail_report BEFORE INSERT ON outbox BEGIN SELECT RAISE(ABORT,'queue full'); END;"));
+        CHECK(next().id < 0);
+        CHECK(service.stats({}).data["total"] == 1 && db.pending_outbox(5).size() == 1);
+        REQUIRE(db.exec("DROP TRIGGER fail_report;"));
+        const auto other = next();
+        CHECK(other.id > original_id && !other.broadcast.empty());
+        event.event_uid.clear();
+        const auto legacy = next();
+        const auto second_legacy = next();
+        CHECK(legacy.id > other.id && second_legacy.id > legacy.id && legacy.uid != second_legacy.uid);
+        CHECK(service.detail(legacy.id).data["event_uid"] == legacy.uid);
+        CHECK(service.search({}, "").data["items"][0]["event_uid"] == second_legacy.uid);
+        CHECK(service.stats({}).data["total"] == 4 && db.pending_outbox(5).size() == 4);
+    }
+    unlink(path);
+}
+
 void run() {
     Db db(":memory:"); REQUIRE(db.migrate() == Db::kSchemaLatest);
     EventService service(db);
@@ -366,6 +433,7 @@ void run() {
         Db disk(file); REQUIRE(disk.migrate() == Db::kSchemaLatest);
         persisted = disk.insert_event(event); REQUIRE(persisted > 0);
         REQUIRE(disk.exec("DROP TABLE event_disposition_history;"
+                          "DROP TRIGGER assign_local_event_uid; DROP INDEX idx_events_uid; ALTER TABLE events DROP COLUMN event_uid;"
                           "ALTER TABLE events DROP COLUMN disposition; ALTER TABLE events DROP COLUMN disposition_revision;"
                           "UPDATE schema_meta SET version=9;"));
     }
@@ -397,6 +465,7 @@ void run() {
         CHECK(saved["disposition"] == "acknowledged" || saved["disposition"] == "ignored");
         CHECK(saved["disposition_revision"].asInt64() == 1);
         REQUIRE(reopened.exec("ALTER TABLE event_disposition_history DROP COLUMN operator_employee_id;"
+                              "DROP TRIGGER assign_local_event_uid; DROP INDEX idx_events_uid; ALTER TABLE events DROP COLUMN event_uid;"
                               "ALTER TABLE event_disposition_history DROP COLUMN operator_name;"
                               "ALTER TABLE event_disposition_history DROP COLUMN note;"
                               "UPDATE schema_meta SET version=10;"));
@@ -408,6 +477,7 @@ void run() {
         CHECK(old_history[0]["operator_name"].isNull() && old_history[0]["note"].isNull());
         CHECK(old_history[0]["operator_employee_id"].isNull());
         REQUIRE(reopened.exec("UPDATE event_disposition_history SET operator_name='historical operator',note='historical note';"
+                              "DROP TRIGGER assign_local_event_uid; DROP INDEX idx_events_uid; ALTER TABLE events DROP COLUMN event_uid;"
                               "ALTER TABLE event_disposition_history DROP COLUMN operator_employee_id;"
                               "UPDATE schema_meta SET version=11;"));
         REQUIRE(reopened.migrate() == Db::kSchemaLatest);
@@ -420,7 +490,7 @@ void run() {
 }
 }
 int main() {
-    try { run(); test_disposition(); test_disposition_records(); test_event_search(); test_batch_disposition(); test_event_stats(); }
+    try { run(); test_disposition(); test_disposition_records(); test_event_search(); test_batch_disposition(); test_event_stats(); test_event_ingest(); }
     catch (const std::exception& error) { fprintf(stderr,"event_detail: %s\n",error.what()); return 1; }
     if (!g_fail) printf("event_detail PASSED\n");
     return g_fail;

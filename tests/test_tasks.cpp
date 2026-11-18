@@ -109,6 +109,7 @@ void test_v5_migration_preserves_data() {
     event.type = "history";
     REQUIRE(db.insert_event(event) > 0);
     REQUIRE(db.exec("UPDATE camera_config_state SET apply_status='legacy_inactive';"
+                    "DROP TRIGGER assign_local_event_uid; DROP INDEX idx_events_uid; ALTER TABLE events DROP COLUMN event_uid;"
                     "DROP TABLE event_importance_history;"
                     "DROP TABLE event_disposition_history;"
                     "ALTER TABLE events DROP COLUMN disposition; ALTER TABLE events DROP COLUMN disposition_revision;"

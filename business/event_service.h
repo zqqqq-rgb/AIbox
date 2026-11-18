@@ -8,9 +8,15 @@ struct EventResult {
     std::string message = "ok";
     Json::Value data;
 };
+struct EventReceipt {
+    int64_t id = -1;
+    std::string uid;
+    std::string broadcast; // only populated for a newly committed event
+};
 class EventService {
 public:
     explicit EventService(Db& db) : db_(db) {}
+    EventReceipt ingest(const proto::RuleEventEvt& event, const std::string& line, bool queue_report);
     Json::Value list(int64_t camera_id, const std::string& algo_id, int64_t from, int64_t to, int limit);
     EventResult search(EventSearchQuery query, const std::string& cursor);
     EventResult stats(const EventFilters& filters);

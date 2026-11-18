@@ -104,14 +104,22 @@ void protocol() {
     event.rule_id = 101;
     event.task_revision = 2;
     event.rule_version = 3;
+    event.event_uid = "session-1";
     CHECK(proto::decode_line(proto::encode_event(event), parsed) == proto::kOk);
     CHECK(parsed.event.rule_version == 3);
+    CHECK(parsed.event.event_uid == "session-1");
+    for (const auto& invalid : {std::string{}, std::string(97, 'x'), std::string("local-123"), std::string("two words")}) {
+        bad = json(proto::encode_event(event));
+        bad["event_uid"] = invalid;
+        CHECK(proto::decode_line(dump(bad), parsed) == proto::kErrProtocol);
+    }
     bad = json(proto::encode_event(event));
     bad.removeMember("rule_id");
     CHECK(proto::decode_line(dump(bad), parsed) == proto::kErrProtocol);
     event.task_id = event.rule_id = event.task_revision = event.rule_version = 0;
+    event.event_uid.clear();
     CHECK(proto::decode_line(proto::encode_event(event), parsed) == proto::kOk &&
-          parsed.event.task_id == 0);
+          parsed.event.task_id == 0 && parsed.event.event_uid.empty());
 }
 void isolation() {
     RuleRuntime runtime;

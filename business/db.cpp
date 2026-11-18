@@ -1289,7 +1289,7 @@ bool Db::update_event_snapshot(int64_t event_id, const std::string& path) {
     auto st = prepare("UPDATE events SET snapshot_path=?1 WHERE id=?2;");
     if (!st) return false;
     if (!st->bind(1, path) || !st->bind(2, event_id)) return false;
-    return st->run();
+    return st->run() && changes() == 1;
 }
 
 }  // namespace biz

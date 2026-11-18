@@ -1142,7 +1142,7 @@ async function pageEvents() {
             h('span', 'dim', camName[j.id] || '—'),  // 名称（列表预取，未命中显示占位）
             h('span', 'ev-algo', j.algo),
             type,
-            j.snap ? h('span', 'ok-txt', '有快照') : h('span', 'dim', '无快照'));
+            h('span', j.snap ? 'event-snapshot-badge ok-txt' : 'event-snapshot-badge dim', j.snap ? '有快照' : '无快照'));
         // class 芯片：targets 的触发类别去重（每类一个，颜色随 classOf 主题）
         const seen = new Set();
         for (const t of Array.isArray(j.targets) ? j.targets : []) {
@@ -1175,6 +1175,7 @@ async function pageEvents() {
 
     const fromStored = (event) => ({ ...event, event_id: event.id, id: event.camera_id, algo: event.algo_id, snap: event.snapshot });
     let activeFilters = {}, nextCursor = null, generation = 0, searching = false;
+    const snapshotsDuringSearch = new Map();
     let statsRequest = 0;
 
     async function refreshStats() {
@@ -1273,6 +1274,7 @@ async function pageEvents() {
         const params = { ...activeFilters, limit: 10 };
         if (loadMore) params.cursor = nextCursor;
         searching = true;
+        snapshotsDuringSearch.clear();
         moreButton.disabled = true;
         moreButton.hidden = !nextCursor;
         status.textContent = loadMore ? '正在加载更早事件…' : '正在查询事件…';
@@ -1283,6 +1285,7 @@ async function pageEvents() {
                 const selector = `[data-event-id="${event.id}"]`;
                 const liveRow = liveList.querySelector(selector);
                 if (liveRow) removeEventRow(liveRow);
+                if (snapshotsDuringSearch.has(event.id)) event.snapshot = snapshotsDuringSearch.get(event.id);
                 if (!histList.querySelector(selector)) histList.appendChild(eventRow(fromStored(event)));
             }
             nextCursor = result.next_cursor;
@@ -1293,6 +1296,7 @@ async function pageEvents() {
         } finally {
             if (alive && request === generation) {
                 searching = false;
+                snapshotsDuringSearch.clear();
                 moreButton.hidden = !nextCursor;
                 moreButton.disabled = batch.isBusy();
             }
@@ -1314,10 +1318,7 @@ async function pageEvents() {
             (filters.important === undefined || String(j.important) === filters.important) &&
             (filters.from === undefined || j.ts >= filters.from) && (filters.to === undefined || j.ts <= filters.to);
     }
-    // 快照异步回填：businessd 截图在事件广播后 ~0.5s 才落盘（板上实测
-    // 0.25~0.76s），WS 行时刻 DB 还没有快照路径（engine 事件帧不带 snap）。
-    // 2s 后按 cam+时间窗静默单查，按 ts 精确命中即就地替换该行——不重建
-    // 列表、不打断浏览；仍无快照（截图失败/流断）保持"无快照"，下次查询兜底
+    // Older businessd versions send camera IDs only. Associate a legacy row only on a unique match.
     function refreshRowSnap(j, row) {
         const request = generation;
         const timer = setTimeout(async () => {
@@ -1342,17 +1343,28 @@ async function pageEvents() {
         snapshotTimers.add(timer);
     }
     const offLive = onEvent('event', (j) => {
-        const event = { ...j, disposition: 'pending', important: false };
+        const event = { disposition: 'pending', important: false, ...j };
         if (!liveChk.checked || !matchesFilters(event)) return;
+        const identified = Number.isSafeInteger(j.event_id) && j.event_id > 0;
+        if (identified && histCol.querySelector(`[data-event-id="${j.event_id}"]`)) return;
         const row = eventRow(event);
         liveList.prepend(row);
         while (liveList.children.length > 100) removeEventRow(liveList.lastChild);
-        refreshRowSnap(j, row);
+        if (!identified) refreshRowSnap(j, row);
         if (!searching) showResultCount();
+    });
+    const offSnapshot = onEvent('event_updated', (j) => {
+        if (!Number.isSafeInteger(j.event_id) || j.event_id <= 0 || !j.snap) return;
+        if (searching) snapshotsDuringSearch.set(j.event_id, j.snap);
+        const badge = histCol.querySelector(`[data-event-id="${j.event_id}"] .event-snapshot-badge`);
+        if (badge) {
+            badge.className = 'event-snapshot-badge ok-txt';
+            badge.textContent = '有快照';
+        }
     });
     query();
 
-    return { unmount() { alive = false; closeDetail?.(); snapshotTimers.forEach(clearTimeout); offLive(); } };
+    return { unmount() { alive = false; closeDetail?.(); snapshotTimers.forEach(clearTimeout); offLive(); offSnapshot(); } };
 }
 
 // ============================================================ #/recordings

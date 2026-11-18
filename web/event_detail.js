@@ -247,7 +247,7 @@ export function showEventDetail(id, { cameraName = {}, classesOf = {}, onUpdated
             body.replaceChildren();
             const fields = h('dl', 'event-detail-fields');
             const items = [
-                ['事件 ID', detail.id], ['发生时间', fmtMs(detail.ts)],
+                ['事件 ID', detail.id], ['事件唯一标识', detail.event_uid ?? '未记录'], ['发生时间', fmtMs(detail.ts)],
                 ['摄像头', `${cameraName[detail.camera_id] || '摄像头'}（cam${detail.camera_id}）`],
                 ['算法', detail.algo_id], ['事件类型', detail.type],
                 ['任务 ID', detail.task_id || '历史事件未记录'], ['规则 ID', detail.rule_id || '历史事件未记录'],
